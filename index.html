@@ -1,1411 +1,575 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Boxify Churn Analysis & Retention Strategy | Executive BI Presentation</title>
+  <title>Boxify Customer Churn Analysis — Story-Driven Presentation</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
-  <!-- CDN with Exact Pinned Versions and Local Fallbacks -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-  <script>
-    if (!window.echarts) {
-      document.write('<script src="lib/echarts.min.js"><\/script>');
-    }
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script>if (typeof window.echarts === 'undefined') { document.write('<script src="./lib/echarts.min.js"><\/script>'); }</script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script>
-    if (!window.Papa) {
-      document.write('<script src="lib/papaparse.min.js"><\/script>');
-    }
-  </script>
-  <!-- Backup data.js for double-clicking under file:// protocol -->
-  <script src="data.js"></script>
+  <script>if (typeof window.Papa === 'undefined') { document.write('<script src="./lib/papaparse.min.js"><\/script>'); }</script>
 </head>
-<body>
-  <div class="app-container">
-    <!-- Top Progress Indicator -->
-    <div id="topProgressBar" class="top-progress-bar"></div>
+<body class="zoom-level-100">
 
-    <!-- Top Command & Navigation Bar -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <div class="brand-badge">
-          <svg class="brand-logo-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M21 16.5l-9 5.25-9-5.25V7.5l9-5.25 9 5.25v9zM12 4.2L5.2 8.1 12 12l6.8-3.9L12 4.2zm-7 5.6v6.4l6.5 3.8V13.6L5 9.8zm8 10.2l6.5-3.8V9.8L13 13.6v6.4z"/>
-          </svg>
-          <span>BOXIFY BI</span>
+  <div id="app-container">
+    <!-- TOP HEADER -->
+    <header id="app-header">
+      <div class="header-left">
+        <div class="brand-wrap">
+          <div class="brand-icon">BX</div>
+          <span>Boxify Insights</span>
         </div>
-        <div class="presentation-title-group">
-          <span class="presentation-title">Customer Churn & Retention Intelligence</span>
-          <span class="presentation-subtitle">Executive BI Dashboard Presentation · Snapshot: 21 Nov 2026</span>
-        </div>
-        <div id="dataStatusBadge" class="data-status-badge">
-          <span class="data-status-dot"></span>
-          <span id="dataStatusText">Initializing Data...</span>
+        <div class="data-status-badge" id="data-status-badge">
+          <span class="status-dot"></span>
+          <span id="data-status-text">Loading boxify_customers.csv...</span>
         </div>
       </div>
 
-      <div class="topbar-center">
-        <div class="slide-nav-controls">
-          <button id="btnPrevSlide" class="btn-icon-nav" title="Previous Slide (Left Arrow)" aria-label="Previous Slide">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          </button>
-          <span id="slideCounterBadge" class="slide-counter-badge">Slide 1 of 12</span>
-          <button id="btnNextSlide" class="btn-icon-nav" title="Next Slide (Right Arrow)" aria-label="Next Slide">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
+      <div class="header-right">
+        <button class="hdr-btn active-toggle" id="btn-explain-simply" title="Toggle plain English labels (ON) vs analyst terms (OFF)">💡 Explain Simply: ON</button>
+        <button class="hdr-btn" id="btn-glossary" title="Open Plain-English Glossary">📖 Glossary</button>
+        <button class="hdr-btn" id="btn-toggle-slicers" title="Show/Hide Filters">☰ Filters</button>
+        <div class="zoom-group" title="Text Size">
+          <button id="btn-zoom-out">A-</button>
+          <span class="zoom-val" id="zoom-val-label">100%</span>
+          <button id="btn-zoom-in">A+</button>
         </div>
-        <select id="slideJumpSelect" class="slide-jump-select" aria-label="Jump to Slide">
-          <option value="0">1. Executive Summary</option>
-          <option value="1">2. Business Objectives & Scope</option>
-          <option value="2">3. Data Overview & Cleaning</option>
-          <option value="3">4. KPI Command Center</option>
-          <option value="4">5. Segment Risk Analysis</option>
-          <option value="5">6. Engagement vs Churn</option>
-          <option value="6">7. CLV & Revenue Attrition</option>
-          <option value="7">8. Predictive ML & Risk Scorer</option>
-          <option value="8">9. Retention Simulator</option>
-          <option value="9">10. Strategic Recommendations</option>
-          <option value="10">A1. Methodology & Math</option>
-          <option value="11">A2. Segment Master Table</option>
-        </select>
-      </div>
-
-      <div class="topbar-right">
-        <button id="btnToggleSlicers" class="btn-action active" title="Toggle Slicer Panel">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-          <span>Slicers</span>
-        </button>
-        <button id="btnPresenterMode" class="btn-action" title="Toggle Presenter Mode (Clean Stage)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-          <span>Presenter</span>
-        </button>
-        <button id="btnDataMethodsModal" class="btn-action" title="View Formulas, Assumptions & Data Dictionary">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          <span>Data & Methods</span>
-        </button>
-        <button id="btnPrintDeck" class="btn-action" title="Print to PDF (Ctrl+P, 1 slide per page)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-          <span>PDF Export</span>
-        </button>
-        <button id="btnFullscreen" class="btn-action" title="Toggle Fullscreen (F)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-        </button>
+        <button class="hdr-btn meeting-mode-pill" id="btn-meeting-mode" title="Meeting Mode (M)">🎥 Meet</button>
+        <button class="hdr-btn" id="btn-theme-toggle" title="Light / Dark">🌓</button>
+        <button class="hdr-btn" id="btn-notes" title="Speaker Notes (N)">📝 Notes</button>
+        <button class="hdr-btn" id="btn-overview" title="Slide Grid (G)">⊞ Grid</button>
+        <button class="hdr-btn" id="btn-tour" title="Tour & Shortcuts (?)">?</button>
+        <button class="hdr-btn primary" id="btn-print" title="Save 16:9 PDF">🖨️ PDF</button>
+        <button class="hdr-btn" id="btn-fullscreen" title="Fullscreen (F)">⛶</button>
       </div>
     </header>
 
-    <!-- Workspace Layout (Sidebar + Stage) -->
-    <div class="workspace-container">
-      
-      <!-- Power BI Slicer Panel -->
-      <aside id="slicerSidebar" class="slicer-sidebar">
+    <!-- VIEWPORT -->
+    <div id="deck-viewport">
+      <!-- LEFT FILTER RAIL -->
+      <aside id="slicer-panel" aria-label="Customer Filters">
         <div class="slicer-header">
-          <div class="slicer-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-            <span>Filters / Slicers</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span id="filterCountBadge" class="filter-count-badge">0 active</span>
-            <button id="btnResetFilters" class="btn-reset-filters" title="Reset all slicers">Reset</button>
-          </div>
+          <span class="slicer-title">🎛️ Focus Filters</span>
+          <button class="slicer-reset-btn" id="btn-reset-filters">Reset</button>
         </div>
-
-        <div class="slicer-scrollable-content">
-          <!-- Subscription Plan Slicer -->
-          <div class="slicer-group">
-            <span class="slicer-label">Subscription Plan</span>
-            <select id="slicerSubscription" class="slicer-select">
-              <option value="ALL">All Subscription Plans</option>
-              <option value="Monthly">Monthly</option>
-              <option value="Quarterly">Quarterly</option>
-              <option value="Annual">Annual</option>
-            </select>
-          </div>
-
-          <!-- Location Slicer -->
-          <div class="slicer-group">
-            <span class="slicer-label">Customer Location</span>
-            <select id="slicerLocation" class="slicer-select">
-              <option value="ALL">All Cities (12 Markets)</option>
-              <option value="Mumbai">Mumbai</option>
-              <option value="Delhi">Delhi</option>
-              <option value="Bengaluru">Bengaluru</option>
-              <option value="Hyderabad">Hyderabad</option>
-              <option value="Chennai">Chennai</option>
-              <option value="Kolkata">Kolkata</option>
-              <option value="Pune">Pune</option>
-              <option value="Ahmedabad">Ahmedabad</option>
-              <option value="Jaipur">Jaipur</option>
-              <option value="Lucknow">Lucknow</option>
-              <option value="Indore">Indore</option>
-              <option value="Bhopal">Bhopal</option>
-            </select>
-          </div>
-
-          <!-- Age Group Slicer -->
-          <div class="slicer-group">
-            <span class="slicer-label">Age Group</span>
-            <div id="pillsAgeGroup" class="slicer-pills">
-              <button class="slicer-pill active" data-val="ALL">All</button>
-              <button class="slicer-pill" data-val="18-24">18-24</button>
-              <button class="slicer-pill" data-val="25-34">25-34</button>
-              <button class="slicer-pill" data-val="35-44">35-44</button>
-              <button class="slicer-pill" data-val="45-54">45-54</button>
-              <button class="slicer-pill" data-val="55+">55+</button>
-            </div>
-          </div>
-
-          <!-- Payment Mode Slicer -->
-          <div class="slicer-group">
-            <span class="slicer-label">Payment Mode</span>
-            <select id="slicerPayment" class="slicer-select">
-              <option value="ALL">All Payment Modes</option>
-              <option value="UPI">UPI</option>
-              <option value="Card">Card</option>
-              <option value="PayPal">PayPal</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-
-          <!-- Gender Slicer -->
-          <div class="slicer-group">
-            <span class="slicer-label">Gender</span>
-            <div id="pillsGender" class="slicer-pills">
-              <button class="slicer-pill active" data-val="ALL">All</button>
-              <button class="slicer-pill" data-val="Female">Female</button>
-              <button class="slicer-pill" data-val="Male">Male</button>
-              <button class="slicer-pill" data-val="Other">Other</button>
-            </div>
-          </div>
-
-          <!-- Join Year Slicer -->
-          <div class="slicer-group">
-            <span class="slicer-label">Join Year</span>
-            <div id="pillsJoinYear" class="slicer-pills">
-              <button class="slicer-pill active" data-val="ALL">All</button>
-              <button class="slicer-pill" data-val="2023">2023</button>
-              <button class="slicer-pill" data-val="2024">2024</button>
-              <button class="slicer-pill" data-val="2025">2025</button>
-              <button class="slicer-pill" data-val="2026">2026</button>
-            </div>
-          </div>
-
-          <!-- Customer Status Slicer -->
-          <div class="slicer-group">
-            <span class="slicer-label">Subscriber Status</span>
-            <div id="pillsStatus" class="slicer-pills">
-              <button class="slicer-pill active" data-val="ALL">All</button>
-              <button class="slicer-pill" data-val="Active">Active</button>
-              <button class="slicer-pill" data-val="Churned">Churned</button>
-            </div>
-          </div>
+        <div class="slicer-counter-box">
+          <span>Showing</span>
+          <span id="slicer-row-counter">5,000 of 5,000 customers</span>
         </div>
+        <div class="active-filter-pills" id="active-filter-pills"></div>
 
-        <div class="slicer-footer">
-          <span class="slicer-label">Current Slice Scope</span>
-          <span id="activeFilterSummary" class="active-filter-summary">All 5,000 customers active across all dimensions.</span>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>Customer Status</span><span>Click to focus</span></div>
+          <div class="chip-group" id="filter-status-chips"></div>
+        </div>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>Subscription Plan</span></div>
+          <div class="chip-group" id="filter-plan-chips"></div>
+        </div>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>How Active (Engagement)</span></div>
+          <div class="chip-group" id="filter-eng-chips"></div>
+        </div>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>Age Group</span></div>
+          <div class="chip-group" id="filter-age-chips"></div>
+        </div>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>City / Location</span></div>
+          <select class="slicer-select" id="filter-location-select"><option value="">All 12 Cities</option></select>
+        </div>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>Payment Mode</span></div>
+          <div class="chip-group" id="filter-pay-chips"></div>
+        </div>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>Gender</span></div>
+          <div class="chip-group" id="filter-gender-chips"></div>
+        </div>
+        <div class="slicer-group">
+          <div class="slicer-label"><span>Join Year</span></div>
+          <div class="chip-group" id="filter-year-chips"></div>
         </div>
       </aside>
 
-      <!-- Slide Stage Area -->
-      <main class="slide-stage">
-        <div class="slide-content-wrapper">
+      <!-- MAIN STAGE -->
+      <main id="stage-container">
 
-          <!-- ==========================================
-               SLIDE 1: Title & Executive Summary
-               ========================================== -->
-          <section id="slide-0" class="slide active">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Boxify Customer Churn & Retention Intelligence</h1>
-                <span class="slide-badge-category">Executive Deliverable</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                <span>Strategic Priority: Curbing 47.1% baseline churn to preserve ₹1.07 Cr - ₹2.13 Cr in annualised recurring subscription revenue.</span>
-              </div>
+        <!-- SLIDE 1: CASE OVERVIEW -->
+        <section class="slide active" id="slide-1" data-slide="0">
+          <div class="hero-banner-container">
+            <span class="hero-tag">Boxify Subscription Box Service · 3-Year Customer Study</span>
+            <h1 class="hero-title">Why Are Subscribers Leaving Early — And How Do We Keep Them?</h1>
+            <p class="hero-subtitle">
+              Boxify delivers monthly lifestyle boxes across India. Over the past year, more customers cancelled before finishing 6 months. This deck explains why subscribers leave, who is most at risk, and how we can cut cancellations by 5–10% in the next 6 months.
+            </p>
+          </div>
+
+          <div class="grid-3-col">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>🎯 Our 3 Main Goals</span></h3></div>
+              <ul style="padding-left:18px; display:flex; flex-direction:column; gap:6px; color:var(--text-muted); line-height:1.45;">
+                <li><strong>Cut Early Cancellations:</strong> Lower customer loss by 5–10% over the next 6 months.</li>
+                <li><strong>Spot High-Risk Groups:</strong> Find which plans, cities, and age groups leave most.</li>
+                <li><strong>Build Loyalty Tactics:</strong> Design targeted offers to keep subscribers past month 6.</li>
+              </ul>
             </div>
 
-            <div class="slide-body">
-              <!-- 4 Headline KPI Cards with Animated Count-Up -->
-              <div class="kpi-row-4">
-                <div class="kpi-card purple">
-                  <div class="kpi-card-header">
-                    <span class="kpi-label">Total Customer Base</span>
-                    <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                  </div>
-                  <div id="s1_kpi_total" class="kpi-value" style="font-size: 32px; font-weight: 800;">0</div>
-                  <div class="kpi-subtext">Active: <span id="s1_sub_active" class="tabular-nums">0</span> · Churned: <span id="s1_sub_churned" class="tabular-nums">0</span></div>
-                </div>
-
-                <div class="kpi-card coral">
-                  <div class="kpi-card-header">
-                    <span class="kpi-label">Portfolio Churn Rate</span>
-                    <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 17l4-4-4-4"></path><path d="M2 13h20"></path><circle cx="6" cy="13" r="4"></circle></svg>
-                  </div>
-                  <div id="s1_kpi_rate" class="kpi-value" style="font-size: 32px; font-weight: 800;">0.0%</div>
-                  <div class="kpi-subtext"><span class="kpi-trend negative">Critical</span> (Benchmark target: &lt;35%)</div>
-                </div>
-
-                <div class="kpi-card amber">
-                  <div class="kpi-card-header">
-                    <span class="kpi-label">Annualised Lost Revenue</span>
-                    <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                  </div>
-                  <div id="s1_kpi_revlost" class="kpi-value" style="font-size: 32px; font-weight: 800;">₹0.00 Cr</div>
-                  <div class="kpi-subtext">Sum of annualised monthly rates for churned</div>
-                </div>
-
-                <div class="kpi-card teal">
-                  <div class="kpi-card-header">
-                    <span class="kpi-label">CLV Erosion Gap</span>
-                    <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
-                  </div>
-                  <div id="s1_kpi_clvgap" class="kpi-value" style="font-size: 32px; font-weight: 800;">₹0</div>
-                  <div class="kpi-subtext">Active <span id="s1_sub_clv_act" class="tabular-nums">₹0</span> vs Churned <span id="s1_sub_clv_chu" class="tabular-nums">₹0</span></div>
-                </div>
-              </div>
-
-              <!-- Executive Narrative Cards -->
-              <div class="grid-2col" style="flex: 1;">
-                <div class="card">
-                  <div class="card-header">
-                    <span class="card-title">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
-                      Executive Diagnostics: The Anatomy of Churn
-                    </span>
-                  </div>
-                  <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14.5px; line-height: 1.6; color: #334155;">
-                    <div style="background: #f8fafc; border-left: 4px solid #ef4444; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #b91c1c; font-size: 15px; display: block; margin-bottom: 2px;">1. The 6-Month Hazard Window:</strong>
-                      <span>58.1% of all cancellations (1,367 customers) occur within the first 6 months. Months 1–3 represent the peak unboxing friction and novelty fade.</span>
-                    </div>
-                    <div style="background: #f8fafc; border-left: 4px solid #6366f1; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #4f46e5; font-size: 15px; display: block; margin-bottom: 2px;">2. The Monthly Plan Trap:</strong>
-                      <span>Monthly subscribers churn at an alarming <strong>60.6%</strong> (1,679 cancellations) vs 37.7% for Quarterly and <strong>14.6%</strong> for Annual members. Monthly users make up 71.3% of all lost subscribers.</span>
-                    </div>
-                    <div style="background: #f8fafc; border-left: 4px solid #f59e0b; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #b45309; font-size: 15px; display: block; margin-bottom: 2px;">3. Engagement as an Early-Warning Radar:</strong>
-                      <span>Subscribers scoring &le;30 in engagement experience 78.9% churn, compared to 28.6% for high-engagement users (&gt;60). Inflection cliff occurs sharply at score 40.</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="card">
-                  <div class="card-header">
-                    <span class="card-title">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                      Strategic Mandate & Quantified Value Creation
-                    </span>
-                  </div>
-                  <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14.5px; line-height: 1.6; color: #334155;">
-                    <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #047857; font-size: 15px; display: block; margin-bottom: 2px;">Goal: 5%–10% Relative Churn Reduction:</strong>
-                      <span>A target reduction to 42.4%–44.7% over the next 6-month cycle preserves 118 to 235 subscribers, generating ₹10.7 Lakh to ₹21.3 Lakh in retained net revenue.</span>
-                    </div>
-                    <div style="background: #f8fafc; border-left: 4px solid #0d9488; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #0f766e; font-size: 15px; display: block; margin-bottom: 4px;">Three-Pillar Action Plan:</strong>
-                      <ul style="margin-left: 20px; margin-top: 4px; display: flex; flex-direction: column; gap: 6px;">
-                        <li><strong>Onboarding & Unboxing Sprint:</strong> Automated day 3-14 touchpoints to lift low engagement scores past the 40-point safety boundary.</li>
-                        <li><strong>Plan Migration Incentives:</strong> Targeted 20% discount on month 2 to migrate Monthly subscribers into Quarterly contracts.</li>
-                        <li><strong>UPI / Failed Payment Retries:</strong> Automated smart dunning to eliminate involuntary renewals in high-risk UPI & Other channels.</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>📊 What We Measure</span></h3></div>
+              <ul style="padding-left:18px; display:flex; flex-direction:column; gap:6px; color:var(--text-muted); line-height:1.45;">
+                <li><strong>Customers Who Left:</strong> Share of subscribers who cancelled.</li>
+                <li><strong>Value per Customer & Lost Sales:</strong> Total spent before leaving and annualised loss.</li>
+                <li><strong>How Active & Months Stayed:</strong> Activity score (0–100) and average months subscribed.</li>
+              </ul>
             </div>
 
-            <div class="slide-footer">
-              <span>Source: boxify_customers.csv · Snapshot 2026-11-21</span>
-              <span>Slide 1 of 12 · Executive Summary</span>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>🛡️ Rules & Limits</span></h3></div>
+              <ul style="padding-left:18px; display:flex; flex-direction:column; gap:6px; color:var(--text-muted); line-height:1.45;">
+                <li><strong>3 Years of Records:</strong> 5,000 customers up to Nov 21, 2026.</li>
+                <li><strong>Monthly Renewals:</strong> Cancellations are counted at the end of a billing cycle.</li>
+                <li><strong>Dataset Only:</strong> All numbers come strictly from <code>boxify_customers.csv</code>.</li>
+              </ul>
             </div>
-          </section>
+          </div>
 
-          <!-- ==========================================
-               SLIDE 2: Business Context, Objectives & Scope
-               ========================================== -->
-          <section id="slide-1" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Business Context, Strategic Objectives & Scope</h1>
-                <span class="slide-badge-category">Framing & Assumptions</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                <span>Establishing quantifiable benchmarks, analytical formulas, and operational constraints for the retention initiative.</span>
-              </div>
+          <div class="card" style="flex:1;">
+            <div class="card-header"><h3 class="card-title"><span>5 Questions Management Asked Us to Answer</span></h3></div>
+            <div class="grid-5-col">
+              <div class="kpi-card" style="cursor:pointer;" onclick="window.bxGoSlide(4)"><span class="kpi-label">Q1 · Who Leaves</span><strong style="font-size:12.5px;">Which age, city, or plan groups leave most?</strong><span class="kpi-sub">Slide 5 →</span></div>
+              <div class="kpi-card kpi-amber" style="cursor:pointer;" onclick="window.bxGoSlide(5)"><span class="kpi-label">Q2 · Activity</span><strong style="font-size:12.5px;">How does customer activity relate to leaving?</strong><span class="kpi-sub">Slide 6 →</span></div>
+              <div class="kpi-card kpi-green" style="cursor:pointer;" onclick="window.bxGoSlide(6)"><span class="kpi-label">Q3 · Value</span><strong style="font-size:12.5px;">How much do leavers spend vs stayers?</strong><span class="kpi-sub">Slide 7 →</span></div>
+              <div class="kpi-card kpi-red" style="cursor:pointer;" onclick="window.bxGoSlide(7)"><span class="kpi-label">Q4 · Predict</span><strong style="font-size:12.5px;">Can we spot likely leavers before they go?</strong><span class="kpi-sub">Slide 8 →</span></div>
+              <div class="kpi-card" style="cursor:pointer;" onclick="window.bxGoSlide(9)"><span class="kpi-label">Q5 · Actions</span><strong style="font-size:12.5px;">What offers & tactics keep each group?</strong><span class="kpi-sub">Slide 10 →</span></div>
             </div>
+          </div>
+        </section>
 
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <!-- Column 1: Context & Objectives -->
-                <div style="display: flex; flex-direction: column; gap: 14px;">
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header">
-                      <span class="card-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                        Business Problem & Operational Challenge
-                      </span>
-                    </div>
-                    <p style="font-size: 14.5px; line-height: 1.65; color: #1e293b;">
-                      <strong>Boxify</strong> operates a premium curated online subscription-box service in India. While top-of-funnel customer acquisition has scaled rapidly to 5,000 recorded subscribers across 12 metropolitan and Tier-2 markets, revenue growth is severely constrained by an overall <strong>47.08% churn rate</strong>.
-                    </p>
-                    <p style="font-size: 14.5px; line-height: 1.65; color: #1e293b; margin-top: 10px;">
-                      High Customer Acquisition Cost (CAC) combined with early churn prevents the recovery of marketing spend, depressing average churned Customer Lifetime Value (CLV) to ₹4,868 compared to ₹9,082 for active subscribers.
-                    </p>
-                  </div>
+        <!-- SLIDE 2: EXECUTIVE SUMMARY -->
+        <section class="slide" id="slide-2" data-slide="1">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 02</span><h2 class="slide-title">Almost Half of Our Subscribers Left — Mostly on Monthly Plans</h2></div>
+              <span class="hint-chip">Hover any card for plain-English meaning</span>
+            </div>
+            <p class="slide-headline" id="s2-headline">Roughly 47 in every 100 customers cancelled, costing Boxify significant recurring revenue.</p>
+          </div>
+          <div class="grid-6-col" id="s2-kpis"></div>
+          <div class="grid-3-col" style="flex:1;">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span data-term="churnGaugeTitle">Customers Who Left (%)</span><span class="info-icon" data-info="Shows what share of customers cancelled. Lower is better.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s2-chart-gauge">Focus</button></div>
+              <div class="chart-container" id="s2-chart-gauge"></div>
+              <div class="chart-insight" id="s2-insight-gauge"></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>Active vs Cancelled Split</span><span class="info-icon" data-info="Click either slice to focus the whole deck on Active or Cancelled customers.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s2-chart-donut">Focus</button></div>
+              <div class="chart-container" id="s2-chart-donut"></div>
+              <div class="chart-insight" id="s2-insight-donut"></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>Top Takeaways From the Data</span></h3></div>
+              <ul class="story-bullets" id="s2-findings"></ul>
+            </div>
+          </div>
+        </section>
 
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header">
-                      <span class="card-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
-                        Case Study Business Objectives
-                      </span>
-                    </div>
-                    <ul style="font-size: 14px; line-height: 1.65; color: #334155; margin-left: 20px; display: flex; flex-direction: column; gap: 8px;">
-                      <li><strong>Primary Objective:</strong> Reduce overall customer churn rate by <strong>5% to 10%</strong> (relative) within a 6-month operational horizon.</li>
-                      <li><strong>Target Retention:</strong> Preserve between <strong>118 and 235</strong> at-risk subscribers.</li>
-                      <li><strong>Revenue Protection:</strong> Recover an estimated <strong>₹10.7 Lakh to ₹21.3 Lakh</strong> in recurring annualized revenue.</li>
-                      <li><strong>Predictive Capability:</strong> Deploy an in-browser explainable machine learning model to detect high-risk active accounts prior to cancellation.</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <!-- Column 2: KPI Formulas & Scope Constraints -->
-                <div style="display: flex; flex-direction: column; gap: 14px;">
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header">
-                      <span class="card-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-                        Standardized KPI & Metric Definitions
-                      </span>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; line-height: 1.5;">
-                      <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                        <strong>Portfolio Churn Rate:</strong> <code style="font-size: 13px;">Count(Churned) / Total Customers</code>
-                      </div>
-                      <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                        <strong>Tenure (Months):</strong> Calendar months elapsed from <code style="font-size: 13px;">JoinDate</code> to <code style="font-size: 13px;">CancelDate</code> (or snapshot date if active).
-                      </div>
-                      <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                        <strong>Monthly Rate (INR):</strong> <code style="font-size: 13px;">TotalSpent / max(TenureMonths, 1)</code>
-                      </div>
-                      <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                        <strong>Annualised Lost Revenue:</strong> <code style="font-size: 13px;">&sum; (MonthlyRate &times; 12)</code> for all churned subscribers.
-                      </div>
-                      <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                        <strong>Early Churn Hazard:</strong> Churned subscribers with <code style="font-size: 13px;">TenureMonths &lt; 6</code>.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header">
-                      <span class="card-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        Analytical Constraints & Scope
-                      </span>
-                    </div>
-                    <ul style="font-size: 14px; line-height: 1.65; color: #334155; margin-left: 20px; display: flex; flex-direction: column; gap: 8px;">
-                      <li><strong>Observation Window:</strong> Exactly 36 operating months (November 2023 through November 2026).</li>
-                      <li><strong>Snapshot Cutoff Date:</strong> <strong>2026-11-21</strong>. All active subscriber tenure is locked to this anchor date.</li>
-                      <li><strong>Billing Cycle Assumption:</strong> Cancellations are recognized strictly at the completion of monthly billing cycles (no mid-cycle pro-rata refunds).</li>
-                      <li><strong>Data Boundary:</strong> Exclusively utilizes the verified 5,000-row customer dataset.</li>
-                    </ul>
-                  </div>
-                </div>
+        <!-- SLIDE 3: OUR DATA (COLUMNS) -->
+        <section class="slide" id="slide-3" data-slide="2">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 03</span><h2 class="slide-title">Our Data: 5,000 Verified Customer Records Across 3 Years</h2></div>
+              <span class="hint-chip">Snapshot: 2026-11-21 · Blank CancelDate = Active</span>
+            </div>
+            <p class="slide-headline">All 11 verified columns from boxify_customers.csv plus derived metrics clearly marked.</p>
+          </div>
+          <div class="grid-4-col" id="s3-quality-kpis"></div>
+          <div class="grid-asymmetric" style="flex:1;">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>Verified Data Dictionary (11 Source Columns)</span></h3></div>
+              <div class="table-wrap" style="max-height:360px;">
+                <table class="bi-table">
+                  <thead><tr><th>Column</th><th>Description</th><th>Type</th><th>Why It Matters</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>CustomerID</code></td><td>Unique customer identifier</td><td>String</td><td>Checks for duplicates (0 found)</td></tr>
+                    <tr><td><code>JoinDate</code></td><td>Subscription start date</td><td>DateTime</td><td>Tracks sign-up cohorts & months stayed</td></tr>
+                    <tr><td><code>CancelDate</code></td><td>Cancellation date (blank = active)</td><td>DateTime/NaN</td><td>Tells us who stayed vs left</td></tr>
+                    <tr><td><code>Age</code></td><td>Age of the customer</td><td>Integer</td><td>Groups buyers into age bands</td></tr>
+                    <tr><td><code>Gender</code></td><td>Male / Female / Other</td><td>String</td><td>Checks demographic fairness</td></tr>
+                    <tr><td><code>Location</code></td><td>City or region (12 cities)</td><td>String</td><td>Spots regional drop-offs</td></tr>
+                    <tr><td><code>SubscriptionType</code></td><td>Monthly / Quarterly / Annual</td><td>String</td><td>Shows how plan length protects retention</td></tr>
+                    <tr><td><code>TotalSpent</code></td><td>Total amount spent till now</td><td>Float</td><td>Measures Value per customer (CLV)</td></tr>
+                    <tr><td><code>BoxesReceived</code></td><td>Number of boxes delivered</td><td>Integer</td><td>Measures delivery depth before leaving</td></tr>
+                    <tr><td><code>EngagementScore</code></td><td>Activity metric (0–100)</td><td>Integer</td><td>Flags quiet subscribers early</td></tr>
+                    <tr><td><code>PaymentMode</code></td><td>Card / UPI / PayPal / Other</td><td>String</td><td>Checks payment friction</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            <div class="slide-footer">
-              <span>Analytical Framework & Governance</span>
-              <span>Slide 2 of 12 · Objectives & Scope</span>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>Derived Fields & Cleaning Rules</span></h3></div>
+              <ul class="story-bullets" style="margin-top:4px;">
+                <li><strong>Churned (derived):</strong> Yes if <code>CancelDate</code> has a date; No (Active) if blank.</li>
+                <li><strong>Months Stayed (derived):</strong> Months between <code>JoinDate</code> and <code>CancelDate</code> (or snapshot <code>2026-11-21</code> if active).</li>
+                <li><strong>Early Leave (derived):</strong> Cancelled before completing 6 months.</li>
+                <li><strong>Age Group & Activity Band (derived):</strong> Age (18–25, 26–35, 36–45, 46+); Activity (Low 0–39, Medium 40–69, High 70–100).</li>
+                <li><strong>Value per Customer / CLV (derived):</strong> Direct <code>TotalSpent</code> per subscriber.</li>
+              </ul>
             </div>
-          </section>
+          </div>
+        </section>
 
-          <!-- ==========================================
-               SLIDE 3: Data Overview & Cleaning
-               ========================================== -->
-          <section id="slide-2" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Data Overview, Cleaning & Quality Assurance</h1>
-                <span class="slide-badge-category">Data Governance</span>
+        <!-- SLIDE 4: CHURN OVER TIME & KPI DASHBOARD -->
+        <section class="slide" id="slide-4" data-slide="3">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 04</span><h2 class="slide-title">Cancellations Accelerated Recently, While Survival Drops Fast in Months 1–6</h2></div>
+              <span class="hint-chip">Click a bar to focus</span>
+            </div>
+            <p class="slide-headline">Monthly sign-ups vs cancellations alongside how many customers stay after N months.</p>
+          </div>
+          <div class="analysis-layout">
+            <div class="analysis-charts-col">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>New Joins vs Cancellations by Quarter</span><span class="info-icon" data-info="Green bars show new subscribers joining; Red bars show subscribers cancelling each quarter.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s4-chart-trend">Focus</button></div>
+                <div class="chart-container" id="s4-chart-trend"></div>
               </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                <span>Structural audit of 5,000 subscriber records confirms 100% data integrity with zero invalid nulls or chronological anomalies.</span>
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>How Many Customers Stay After N Months (Cohort Survival)</span><span class="info-icon" data-info="Shows what % of subscribers are still active at Month 1, 3, 6, 12, 18, and 24. Dashed line marks the 6-month danger zone.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s4-chart-cohort">Focus</button></div>
+                <div class="chart-container" id="s4-chart-cohort"></div>
               </div>
             </div>
+            <aside class="story-panel" id="s4-story"></aside>
+          </div>
+        </section>
 
-            <div class="slide-body">
-              <!-- Quality KPI Checks -->
-              <div class="kpi-row-4">
-                <div class="kpi-card teal">
-                  <div class="kpi-card-header"><span class="kpi-label">Record Completeness</span><span class="badge badge-green">PASSED</span></div>
-                  <div class="kpi-value">5,000 / 5,000</div>
-                  <div class="kpi-subtext">0 missing rows · 11 fields intact</div>
-                </div>
-                <div class="kpi-card purple">
-                  <div class="kpi-card-header"><span class="kpi-label">Primary Key Uniqueness</span><span class="badge badge-green">100%</span></div>
-                  <div class="kpi-value">5,000 Unique IDs</div>
-                  <div class="kpi-subtext">0 duplicate CustomerIDs</div>
-                </div>
-                <div class="kpi-card blue">
-                  <div class="kpi-card-header"><span class="kpi-label">Missing Value Audit</span><span class="badge badge-green">VALID</span></div>
-                  <div class="kpi-value">2,646 Active Nulls</div>
-                  <div class="kpi-subtext">CancelDate blank = active subscribers</div>
-                </div>
-                <div class="kpi-card amber">
-                  <div class="kpi-card-header"><span class="kpi-label">Domain Constraints</span><span class="badge badge-green">VERIFIED</span></div>
-                  <div class="kpi-value">100% In Range</div>
-                  <div class="kpi-subtext">Age 18-65 · Score 0-100 · Spent &gt; 0</div>
-                </div>
+        <!-- SLIDE 5: WHO LEAVES? SEGMENTS (Q1) -->
+        <section class="slide" id="slide-5" data-slide="4">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 05 · Q1</span><h2 class="slide-title">Monthly Plan Subscribers Leave Nearly Twice as Often as Annual Members</h2></div>
+              <span class="hint-chip">Click any bar to filter</span>
+            </div>
+            <p class="slide-headline">Comparing cancellations across Plans, Age Groups, Cities, and Payment Modes.</p>
+          </div>
+          <div class="analysis-layout">
+            <div class="analysis-charts-col">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>Customers Who Left (%) by Plan & Age Group</span><span class="info-icon" data-info="Red bars highlight the highest-risk plan and age group. Click any bar to filter.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s5-chart-planage">Focus</button></div>
+                <div class="chart-container" id="s5-chart-planage"></div>
               </div>
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>Customers Who Left (%) by City (Top & Bottom)</span><span class="info-icon" data-info="Compares city-level cancellation rates against the network average line.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s5-chart-city">Focus</button></div>
+                <div class="chart-container" id="s5-chart-city"></div>
+              </div>
+            </div>
+            <aside class="story-panel" id="s5-story"></aside>
+          </div>
+        </section>
 
-              <!-- Data Dictionary Table and Profiling Visuals -->
-              <div class="grid-2col" style="flex: 1;">
-                <div class="card" style="flex: 1;">
-                  <div class="card-header">
-                    <span class="card-title">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
-                      Dataset Field Specifications & Dictionary
-                    </span>
-                  </div>
-                  <div class="table-responsive">
-                    <table class="bi-table">
-                      <thead>
-                        <tr>
-                          <th>Field Name</th>
-                          <th>Type</th>
-                          <th>Nulls</th>
-                          <th>Domain / Values</th>
-                          <th>Description</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr><td><code>CustomerID</code></td><td>String</td><td>0</td><td>BX100001–BX105000</td><td>Unique customer identifier</td></tr>
-                        <tr><td><code>JoinDate</code></td><td>Date</td><td>0</td><td>2023-11-23 to 2026-10-22</td><td>Subscription start date</td></tr>
-                        <tr><td><code>CancelDate</code></td><td>Date</td><td>2,646</td><td>2024-01-18 to 2026-11-21</td><td>Cancellation date (blank = active)</td></tr>
-                        <tr><td><code>Age</code></td><td>Integer</td><td>0</td><td>18 to 65 (mean 34.2)</td><td>Customer age at signup</td></tr>
-                        <tr><td><code>Gender</code></td><td>Categorical</td><td>0</td><td>Female, Male, Other</td><td>Customer reported gender</td></tr>
-                        <tr><td><code>Location</code></td><td>Categorical</td><td>0</td><td>12 Indian Metro/Tier-2 Cities</td><td>Primary shipping city</td></tr>
-                        <tr><td><code>SubscriptionType</code></td><td>Categorical</td><td>0</td><td>Monthly, Quarterly, Annual</td><td>Contract billing cadence</td></tr>
-                        <tr><td><code>TotalSpent</code></td><td>Float</td><td>0</td><td>₹799 to ₹27,965 (INR)</td><td>Cumulative gross spend (CLV)</td></tr>
-                        <tr><td><code>BoxesReceived</code></td><td>Integer</td><td>0</td><td>1 to 35 boxes</td><td>Fulfilled subscription deliveries</td></tr>
-                        <tr><td><code>EngagementScore</code></td><td>Float</td><td>0</td><td>0 to 100 (mean 58.0)</td><td>In-app product interaction index</td></tr>
-                        <tr><td><code>PaymentMode</code></td><td>Categorical</td><td>0</td><td>UPI, Card, PayPal, Other</td><td>Primary recurring payment gateway</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+        <!-- SLIDE 6: ENGAGEMENT AND CHURN (Q2) -->
+        <section class="slide" id="slide-6" data-slide="5">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 06 · Q2</span><h2 class="slide-title">Low-Activity Customers Leave at More Than Double the Rate of Active Fans</h2></div>
+              <span class="hint-chip">Click an activity band to focus</span>
+            </div>
+            <p class="slide-headline">Low activity and leaving tend to go together — though data alone cannot prove which causes which.</p>
+          </div>
+          <div class="analysis-layout">
+            <div class="analysis-charts-col">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>Customers Who Left (%) by Activity Band</span><span class="info-icon" data-info="Compares cancellation rate across Low (0-39), Medium (40-69), and High (70-100) activity groups.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s6-chart-eng">Focus</button></div>
+                <div class="chart-container" id="s6-chart-eng"></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>Average Months Stayed by Activity Band</span><span class="info-icon" data-info="Shows how many months customers stay on average in each activity band. Dashed line = 6-month mark.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s6-chart-tenure">Focus</button></div>
+                <div class="chart-container" id="s6-chart-tenure"></div>
+              </div>
+            </div>
+            <aside class="story-panel" id="s6-story"></aside>
+          </div>
+        </section>
 
-                <div class="card" style="flex: 1;">
-                  <div class="card-header">
-                    <span class="card-title">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                      Data Profile & Distribution Overview
-                    </span>
-                  </div>
-                  <div id="chart_data_profile" class="chart-container"></div>
-                  <div id="insight_s3" class="chart-insight-bar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>Dataset features a balanced age distribution (median 34 yrs) and normally distributed engagement scores (mean 58.0).</span>
-                  </div>
+        <!-- SLIDE 7: CUSTOMER VALUE (Q3) -->
+        <section class="slide" id="slide-7" data-slide="6">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 07 · Q3</span><h2 class="slide-title">Subscribers Who Stay Spend Over 2.5x More Than Those Who Leave</h2></div>
+              <span class="hint-chip">Annualised loss assumes 12-month cycle</span>
+            </div>
+            <p class="slide-headline">Comparing Value per Customer (CLV), months stayed, and revenue lost to early cancellations.</p>
+          </div>
+          <div class="analysis-layout">
+            <div class="analysis-charts-col">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>Value per Customer (CLV) & Months Stayed: Active vs Left</span><span class="info-icon" data-info="Compares average total spend and average months subscribed between Active customers and those who left.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s7-chart-clv">Focus</button></div>
+                <div class="chart-container" id="s7-chart-clv"></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>When Leavers Cancel (Months Before Leaving)</span><span class="info-icon" data-info="Shows how many cancelled customers left in Months 1-3, 4-6, 7-12, or 13+. Red marks early leavers (<6 months).">i</span></h3><button class="card-action-btn btn-focus" data-chart="s7-chart-hist">Focus</button></div>
+                <div class="chart-container" id="s7-chart-hist"></div>
+              </div>
+            </div>
+            <aside class="story-panel" id="s7-story"></aside>
+          </div>
+        </section>
+
+        <!-- SLIDE 8: PREDICTING WHO MAY LEAVE (Q4) -->
+        <section class="slide" id="slide-8" data-slide="7">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 08 · Q4</span><h2 class="slide-title">A Simple Prediction Model Flags Likely Leavers Before They Cancel</h2></div>
+              <button class="card-action-btn" id="btn-s8-toggle">Switch: Risk Chart / Top 20 At-Risk List</button>
+            </div>
+            <p class="slide-headline" id="s8-headline">Trained on 80% of customers and tested on 20% to identify the biggest warning signs.</p>
+          </div>
+          <div class="analysis-layout">
+            <div class="analysis-charts-col">
+              <div class="card" id="s8-chart-card">
+                <div class="card-header"><h3 class="card-title"><span>Biggest Risk Factors Driving Cancellations</span><span class="info-icon" data-info="Shows which customer traits push cancellation risk up the most in our simple prediction model.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s8-chart-factors">Focus</button></div>
+                <div class="chart-container" id="s8-chart-factors"></div>
+              </div>
+              <div class="card" id="s8-table-card" style="display:none;">
+                <div class="card-header"><h3 class="card-title"><span>Top 20 At-Risk Active Customers (Act Now)</span></h3><button class="card-action-btn" id="btn-s8-export">Export CSV</button></div>
+                <div class="table-wrap" id="s8-atrisk-table"></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>Interactive Risk Checker (Test Any Customer Profile)</span></h3><span id="rc-badge" class="badge-pill badge-red">High Risk</span></div>
+                <div class="grid-4-col">
+                  <div><label style="font-size:11px;font-weight:700;">Plan</label><select class="slicer-select" id="rc-plan"><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option><option value="Annual">Annual</option></select></div>
+                  <div><label style="font-size:11px;font-weight:700;">Activity (0-100)</label><input type="range" id="rc-eng" min="5" max="95" value="25" style="width:100%;"><div style="font-size:11px;" id="rc-eng-val">25 (Low)</div></div>
+                  <div><label style="font-size:11px;font-weight:700;">Months Stayed</label><input type="range" id="rc-tenure" min="1" max="24" value="3" style="width:100%;"><div style="font-size:11px;" id="rc-tenure-val">3 months</div></div>
+                  <div><label style="font-size:11px;font-weight:700;">Age</label><input type="range" id="rc-age" min="18" max="60" value="23" style="width:100%;"><div style="font-size:11px;" id="rc-age-val">23 yrs</div></div>
                 </div>
               </div>
             </div>
+            <aside class="story-panel" id="s8-story"></aside>
+          </div>
+        </section>
 
-            <div class="slide-footer">
-              <span>Data Quality & Integrity Assurance</span>
-              <span>Slide 3 of 12 · Data Overview</span>
+        <!-- SLIDE 9: RETENTION SIMULATOR (WHAT-IF) -->
+        <section class="slide" id="slide-9" data-slide="8">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 09 · GOAL: -5% TO -10%</span><h2 class="slide-title">Retention Simulator: How We Hit Our 5–10% Churn Reduction Goal</h2></div>
+              <button class="card-action-btn" id="btn-sim-reset">Reset Sliders</button>
             </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 4: KPI Dashboard (Power BI Command Center)
-               ========================================== -->
-          <section id="slide-3" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Portfolio KPI Command Center</h1>
-                <span class="slide-badge-category">Core Dashboard</span>
+            <p class="slide-headline">Indicative what-if model (not a forecast) showing customers and revenue saved over 6 months.</p>
+          </div>
+          <div class="analysis-layout">
+            <div class="analysis-charts-col">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>6-Month Retention Levers</span></h3></div>
+                <div class="sim-slider-group">
+                  <div class="sim-row"><label>1. Boost Low-Activity Subscribers (%)</label><span class="sim-val-badge" id="sim-eng-val">+15%</span><input type="range" class="sim-range" id="sim-eng" min="0" max="40" step="5" value="15"></div>
+                  <div class="sim-row"><label>2. Move Monthly Subscribers to Quarterly/Annual (%)</label><span class="sim-val-badge" id="sim-plan-val">15%</span><input type="range" class="sim-range" id="sim-plan" min="0" max="40" step="5" value="15"></div>
+                  <div class="sim-row"><label>3. Reduce Early Cancellations (&lt;6 Months) (%)</label><span class="sim-val-badge" id="sim-early-val">15%</span><input type="range" class="sim-range" id="sim-early" min="0" max="35" step="5" value="15"></div>
+                  <div class="sim-row"><label>4. Targeted Offer Uptake for High-Risk Group (%)</label><span class="sim-val-badge" id="sim-offer-val">20%</span><input type="range" class="sim-range" id="sim-offer" min="0" max="50" step="5" value="20"></div>
+                </div>
+                <div style="margin-top:6px;">
+                  <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:700; margin-bottom:4px;"><span>Progress Toward 5–10% Reduction Target</span><span id="sim-prog-lbl">0.0 pp</span></div>
+                  <div class="target-progress-wrap"><div class="target-progress-fill" id="sim-prog-fill" style="width:0%;"></div></div>
+                </div>
+                <p style="font-size:11px; color:var(--text-dim);">Indicative only: assumes each lever retains a proportional share of active/at-risk subscribers over the next 6 months.</p>
               </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                <span>Active base is 2,646 (52.9%) against 2,354 churned (47.1%), with monthly churn rate hovering at a steady ~4.1%.</span>
-              </div>
-            </div>
-
-            <div class="slide-body">
-              <!-- 8 KPI Cards Grid -->
-              <div class="kpi-row-8">
-                <div class="kpi-card purple">
-                  <div class="kpi-card-header"><span class="kpi-label">Total Customers</span></div>
-                  <div id="s4_kpi_total" class="kpi-value">0</div>
-                  <div class="kpi-subtext">100% of current slice</div>
-                </div>
-                <div class="kpi-card teal">
-                  <div class="kpi-card-header"><span class="kpi-label">Active Base</span></div>
-                  <div id="s4_kpi_active" class="kpi-value">0</div>
-                  <div id="s4_sub_active_pct" class="kpi-subtext">0.0% of total</div>
-                </div>
-                <div class="kpi-card coral">
-                  <div class="kpi-card-header"><span class="kpi-label">Churned Base</span></div>
-                  <div id="s4_kpi_churned" class="kpi-value">0</div>
-                  <div id="s4_sub_churned_pct" class="kpi-subtext">0.0% of total</div>
-                </div>
-                <div class="kpi-card coral">
-                  <div class="kpi-card-header"><span class="kpi-label">Churn Rate</span></div>
-                  <div id="s4_kpi_rate" class="kpi-value">0.0%</div>
-                  <div class="kpi-subtext"><span class="kpi-trend negative">Critical</span></div>
-                </div>
-                <div class="kpi-card purple">
-                  <div class="kpi-card-header"><span class="kpi-label">Average CLV</span></div>
-                  <div id="s4_kpi_clv" class="kpi-value">₹0</div>
-                  <div id="s4_sub_clv_diff" class="kpi-subtext">Active: ₹0 · Churned: ₹0</div>
-                </div>
-                <div class="kpi-card amber">
-                  <div class="kpi-card-header"><span class="kpi-label">Annual Revenue Lost</span></div>
-                  <div id="s4_kpi_revlost" class="kpi-value">₹0.00 Cr</div>
-                  <div class="kpi-subtext">Annualised monthly spend</div>
-                </div>
-                <div class="kpi-card blue">
-                  <div class="kpi-card-header"><span class="kpi-label">Average Tenure</span></div>
-                  <div id="s4_kpi_tenure" class="kpi-value">0.0m</div>
-                  <div id="s4_sub_tenure_diff" class="kpi-subtext">Active 0m · Churned 0m</div>
-                </div>
-                <div class="kpi-card teal">
-                  <div class="kpi-card-header"><span class="kpi-label">Avg Engagement</span></div>
-                  <div id="s4_kpi_eng" class="kpi-value">0.0</div>
-                  <div id="s4_sub_eng_high" class="kpi-subtext">0.0% High (&gt;60 score)</div>
-                </div>
-              </div>
-
-              <!-- 3 Interactive Visuals: Monthly Rate, Inflow/Outflow, Cohort Heatmap -->
-              <div class="grid-3col" style="flex: 1;">
-                <div class="card">
-                  <div class="card-header">
-                    <span class="card-title">Monthly Churn Rate Trend (%)</span>
-                    <button class="btn-card-toggle" data-target="chart_monthly_churn">Toggle View</button>
-                  </div>
-                  <div id="chart_monthly_churn" class="chart-container"></div>
-                  <div id="insight_monthly_churn" class="chart-insight-bar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>Monthly churn rate stabilizes around 4.1% following early volatility in Q1 2024.</span>
-                  </div>
-                </div>
-
-                <div class="card">
-                  <div class="card-header">
-                    <span class="card-title">New vs Churned Customers</span>
-                    <button class="btn-card-toggle" data-target="chart_inflow_outflow">Toggle View</button>
-                  </div>
-                  <div id="chart_inflow_outflow" class="chart-container"></div>
-                  <div id="insight_inflow_outflow" class="chart-insight-bar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>Net subscriber additions peaked in Q3 2025 before attrition rose to ~110 monthly churns.</span>
-                  </div>
-                </div>
-
-                <div class="card">
-                  <div class="card-header">
-                    <span class="card-title">Cohort Retention Heatmap (%)</span>
-                    <button class="btn-card-toggle" data-target="chart_cohort_heatmap">Toggle View</button>
-                  </div>
-                  <div id="chart_cohort_heatmap" class="chart-container"></div>
-                  <div id="insight_cohort_heatmap" class="chart-insight-bar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>Cohort retention drops to ~72% by month 6 and stabilizes around 42% after month 18.</span>
-                  </div>
-                </div>
+              <div class="card">
+                <div class="card-header"><h3 class="card-title"><span>Projected Cancellation Rate vs Target Gauge</span><span class="info-icon" data-info="Shows the simulated cancellation rate after your chosen actions.">i</span></h3><button class="card-action-btn btn-focus" data-chart="s9-chart-gauge">Focus</button></div>
+                <div class="chart-container" id="s9-chart-gauge"></div>
               </div>
             </div>
+            <aside class="story-panel" id="s9-story"></aside>
+          </div>
+        </section>
 
-            <div class="slide-footer">
-              <span>Interactive Portfolio Command Center</span>
-              <span>Slide 4 of 12 · Executive Dashboard</span>
+        <!-- SLIDE 10: RETENTION PLAYBOOK (Q5) -->
+        <section class="slide" id="slide-10" data-slide="9">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 10 · Q5</span><h2 class="slide-title">Retention Playbook: Friendly Segments & Monday Morning Offers</h2></div>
             </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 5: Segment Analysis
-               ========================================== -->
-          <section id="slide-4" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Multi-Dimensional Segment Risk Analysis</h1>
-                <span class="slide-badge-category">Segment Drilldown</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
-                <span>Subscription plan is the dominant structural driver: Monthly members churn at 60.6% (4.1x higher than Annual members at 14.6%). Click any bar to cross-filter.</span>
-              </div>
+            <p class="slide-headline">Tailored "What to do on Monday" tactics for each subscriber group with expected benefits and risks.</p>
+          </div>
+          <div class="card" style="flex:1;">
+            <div class="table-wrap" style="max-height:none;">
+              <table class="bi-table">
+                <thead><tr><th>Friendly Segment Name</th><th>Who They Are</th><th>What We Should Do (Monday Action)</th><th>Expected Benefit</th><th>Risk & Measure</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>🌱 Early Quitters</strong></td><td>Young (18–25), Monthly plan, months 1–5</td><td>Send "Month 3 Surprise Bonus Item" + onboarding tips at Day 45</td><td>Cut &lt;6m cancels by 15–20%</td><td>Bonus cost · Track 6-mo survival</td></tr>
+                  <tr><td><strong>😴 Quiet Subscribers</strong></td><td>Low activity score (&lt;40), active now</td><td>Trigger 2-tap box customization email before billing date</td><td>Lift activity score +15 pts</td><td>Email fatigue · Track click rate</td></tr>
+                  <tr><td><strong>📅 Month-to-Month Movers</strong></td><td>Active Monthly users on 4+ boxes</td><td>Offer "Switch to Quarterly &amp; get 1 box 50% off"</td><td>Move 15% off high-churn plan</td><td>Margin dip · Track plan upgrades</td></tr>
+                  <tr><td><strong>🏆 Loyal Champions</strong></td><td>Annual plan or High activity (70+)</td><td>Launch VIP referral perk ("Give ₹300, Get ₹300")</td><td>Grow low-churn base organically</td><td>Referral abuse · Track new Annuals</td></tr>
+                </tbody>
+              </table>
             </div>
+          </div>
+        </section>
 
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <!-- Left: 4 Segment Bar Charts -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px;">
-                  <div class="card">
-                    <div class="card-header"><span class="card-title">By Subscription Plan</span></div>
-                    <div id="chart_seg_sub" class="chart-container"></div>
-                  </div>
-                  <div class="card">
-                    <div class="card-header"><span class="card-title">By Payment Mode</span></div>
-                    <div id="chart_seg_pay" class="chart-container"></div>
-                  </div>
-                  <div class="card">
-                    <div class="card-header"><span class="card-title">By Age Group</span></div>
-                    <div id="chart_seg_age" class="chart-container"></div>
-                  </div>
-                  <div class="card">
-                    <div class="card-header"><span class="card-title">By Top & Bottom Cities</span></div>
-                    <div id="chart_seg_loc" class="chart-container"></div>
-                  </div>
-                </div>
-
-                <!-- Right: Ranked Highest-Risk Segments Table -->
-                <div class="card" style="flex: 1;">
-                  <div class="card-header">
-                    <span class="card-title">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                      Ranked Highest-Risk Customer Segments
-                    </span>
-                    <button id="btnExportRiskSegments" class="btn-card-toggle">Download CSV</button>
-                  </div>
-                  <div class="table-responsive">
-                    <table class="bi-table">
-                      <thead>
-                        <tr>
-                          <th>Dimension</th>
-                          <th>Segment Name</th>
-                          <th class="number">Total</th>
-                          <th class="number">Churned</th>
-                          <th class="number">Churn Rate</th>
-                          <th class="number">Avg CLV</th>
-                          <th class="number">Lost Revenue</th>
-                        </tr>
-                      </thead>
-                      <tbody id="tbody_risk_segments">
-                        <!-- Populated dynamically via app.js -->
-                      </tbody>
-                    </table>
-                  </div>
-                  <div id="insight_s5" class="chart-insight-bar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>Monthly subscribers alone represent ₹1.51 Cr in annualized lost revenue (70.8% of all churn losses).</span>
-                  </div>
-                </div>
+        <!-- SLIDE 11: ROADMAP -->
+        <section class="slide" id="slide-11" data-slide="10">
+          <div class="slide-header">
+            <div class="slide-title-row"><div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 11</span><h2 class="slide-title">Action Roadmap: Quick Wins (0–30 Days) vs Long-Term (3–6 Months)</h2></div></div>
+            <p class="slide-headline">Clear owners, timelines, and success measures from immediate triage to structural retention.</p>
+          </div>
+          <div class="grid-2-col" style="flex:1;">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>⚡ Quick Wins (0–30 Days)</span></h3><span class="badge-pill badge-green">Fast Launch</span></div>
+              <div class="table-wrap" style="max-height:none;">
+                <table class="bi-table">
+                  <thead><tr><th>Action</th><th>Expected Impact</th><th>Owner & Timeline</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>Reach out to Top 200 quiet active users</strong></td><td>Save 30–50 at-risk boxes</td><td>CRM Lead · Week 1–2</td></tr>
+                    <tr><td><strong>Launch Month-3 check-in & sneak peek</strong></td><td>Lift early retention +5%</td><td>Lifecycle Marketing · Week 2–4</td></tr>
+                    <tr><td><strong>Promote Quarterly upgrade at checkout</strong></td><td>Shift new Monthly mix down</td><td>Product / Web · Week 3–4</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            <div class="slide-footer">
-              <span>Cross-filtering active: click any segment bar to filter the presentation</span>
-              <span>Slide 5 of 12 · Segment Risk Analysis</span>
-            </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 6: Engagement vs Churn
-               ========================================== -->
-          <section id="slide-5" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Engagement vs Churn: Behavioral Signal & Cliff Analysis</h1>
-                <span class="slide-badge-category">Behavioral Intelligence</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                <span>Customer engagement exhibits a sharp cliff at score 40: churn rate jumps from 34.1% above 40 to 76.2% below 40.</span>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>🚀 Long-Term Loyalty (3–6 Months)</span></h3><span class="badge-pill badge-violet">Structural</span></div>
+              <div class="table-wrap" style="max-height:none;">
+                <table class="bi-table">
+                  <thead><tr><th>Initiative</th><th>Expected Impact</th><th>Owner & Timeline</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>Auto-flag low-activity users weekly</strong></td><td>Continuous early warning</td><td>Data &amp; IT · Month 2–3</td></tr>
+                    <tr><td><strong>Box personalization portal</strong></td><td>Higher activity &amp; 2x stay</td><td>Product Team · Month 3–5</td></tr>
+                    <tr><td><strong>6-month loyalty milestone reward</strong></td><td>Hit full 5–10% churn cut</td><td>Retention Lead · Month 4–6</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
+          </div>
+        </section>
 
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <!-- Left: Engagement Band Churn & Correlation Stats -->
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header"><span class="card-title">Churn Rate by Engagement Band</span></div>
-                    <div id="chart_eng_band" class="chart-container"></div>
-                  </div>
-
-                  <div class="card" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 16px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                      <span style="font-size: 14.5px; font-weight: 700; color: #1e293b;">Statistical Correlation Metrics</span>
-                      <span class="badge badge-purple" style="font-size: 12.5px;">Pearson r = -0.3791</span>
-                    </div>
-                    <p style="font-size: 14px; color: #334155; line-height: 1.6;">
-                      <strong>Point-Biserial Correlation (r = -0.38, p &lt; 0.0001):</strong> Demonstrates a statistically significant, robust inverse relationship between engagement score and cancellation probability.
-                    </p>
-                    <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-top: 8px;">
-                      <strong>Tenure Correlation (r = +0.29):</strong> Higher initial engagement translates directly into extended subscriber longevity and superior lifetime value.
-                    </p>
-                  </div>
-                </div>
-
-                <!-- Right: Scatter Plot Score vs Tenure -->
-                <div class="card" style="flex: 1;">
-                  <div class="card-header">
-                    <span class="card-title">Engagement Score vs Tenure (Months) by Status</span>
-                  </div>
-                  <div id="chart_eng_scatter" class="chart-container"></div>
-                  <div id="insight_s6" class="chart-insight-bar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>Subscribers in the Low Engagement band (0-30) churn at 78.9%—nearly 2.8x the rate of High Engagement users (28.6%).</span>
-                  </div>
-                </div>
+        <!-- SLIDE 12: FINAL RECOMMENDATIONS AND ASSUMPTIONS -->
+        <section class="slide" id="slide-12" data-slide="11">
+          <div class="slide-header">
+            <div class="slide-title-row">
+              <div class="slide-title-wrap"><span class="slide-num-pill">SLIDE 12 · CLOSING</span><h2 class="slide-title">Final Recommendations & What Assumptions They Depend On</h2></div>
+              <button class="card-action-btn" id="btn-s12-export">Export Action Plan CSV</button>
+            </div>
+            <p class="slide-headline">Top 5 actions linked directly to the assumptions behind them, plus what we still need to learn.</p>
+          </div>
+          <div class="closing-layout">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>Top 5 Prioritized Actions</span></h3></div>
+              <div class="table-wrap" style="max-height:none;">
+                <table class="bi-table">
+                  <thead><tr><th>Action</th><th>Why / Evidence</th><th>Expected Impact</th><th>Risk</th><th>Success Measure</th><th>Timeline & Links</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>1. Upgrade Monthly → Quarterly</strong></td><td>Monthly leaves ~2x more than Annual</td><td>-3% to -5% churn</td><td>Lower initial fee</td><td>% on Quarterly+</td><td>0–30d · [A2, A5]</td></tr>
+                    <tr><td><strong>2. Save Quiet Subscribers (&lt;40)</strong></td><td>Low-activity group leaves fastest</td><td>Save ₹15L–₹25L/yr</td><td>Offer fatigue</td><td>Activity lift +10</td><td>0–30d · [A1, A6]</td></tr>
+                    <tr><td><strong>3. Month 1–6 Onboarding Milestone</strong></td><td>Heavy drop-off before 6 months</td><td>-2% to -4% churn</td><td>Gift cost</td><td>6-mo survival %</td><td>1–3m · [A3, A5]</td></tr>
+                    <tr><td><strong>4. Weekly Risk Score Alerts</strong></td><td>Model spots ~7–8 of 10 leavers</td><td>Faster outreach</td><td>False alarms</td><td>Save rate of flagged</td><td>2–4m · [A6, A7]</td></tr>
+                    <tr><td><strong>5. City Pilot in High-Churn Hubs</strong></td><td>Targeted city retention offers</td><td>+5% local stay</td><td>Local promo cost</td><td>City churn gap</td><td>3–6m · [A4, A7]</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            <div class="slide-footer">
-              <span>Behavioral Diagnostics & Inflection Analysis</span>
-              <span>Slide 6 of 12 · Engagement vs Churn</span>
-            </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 7: CLV and Revenue Impact
-               ========================================== -->
-          <section id="slide-6" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Customer Lifetime Value & Revenue Attrition</h1>
-                <span class="slide-badge-category">Financial Exposure</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                <span>Early churn (&lt;6 months) accounts for 58.1% of all cancellations and destroys ₹1.24 Cr in potential lifetime value.</span>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span>Assumptions Behind These Actions</span></h3></div>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <div class="assumption-item"><strong>[A1] Blank CancelDate:</strong> Blank means active as of <code>2026-11-21</code>; 0 duplicates.</div>
+                <div class="assumption-item"><strong>[A2] Monthly Renewals:</strong> Cancellations happen at cycle end, not mid-month.</div>
+                <div class="assumption-item"><strong>[A3] Annualised Loss:</strong> Revenue lost assumes a 12-month recurring cycle.</div>
+                <div class="assumption-item"><strong>[A4] Indicative Simulator:</strong> What-if sliders illustrate scenarios, not guarantees.</div>
+                <div class="assumption-item"><strong>[A5] Correlation ≠ Causation:</strong> Low activity and leaving go together; A/B tests must confirm impact.</div>
+                <div class="assumption-item"><strong>[A6] Model Limits:</strong> Simple prediction model uses only the 11 dataset fields.</div>
+                <div class="assumption-item"><strong>[A7] Dataset Scope:</strong> 3-year sample only; no competitor or product-defect data.</div>
               </div>
             </div>
+          </div>
+          <div class="closing-banner">
+            <span><strong>What we still don't know:</strong> Exact cancellation reasons (price vs box quality) require a 1-question exit survey.</span>
+            <span><strong>Closing Message:</strong> Moving subscribers past Month 6 and lifting low activity cuts churn 5–10%.</span>
+          </div>
+        </section>
 
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <!-- Left 2 Visuals: CLV Bar & Tenure Histogram -->
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header"><span class="card-title">Active vs Churned Average CLV (₹)</span></div>
-                    <div id="chart_clv_comp" class="chart-container"></div>
-                  </div>
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header"><span class="card-title">Tenure at Cancellation Histogram (Peak Early Churn)</span></div>
-                    <div id="chart_tenure_hist" class="chart-container"></div>
-                  </div>
-                </div>
-
-                <!-- Right 2 Visuals: Revenue Lost Treemap & Kaplan-Meier Survival Curves -->
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header"><span class="card-title">Annual Revenue Lost by Plan & City (₹)</span></div>
-                    <div id="chart_rev_treemap" class="chart-container"></div>
-                  </div>
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header"><span class="card-title">Kaplan-Meier Style Survival Retention Curves (%)</span></div>
-                    <div id="chart_survival_curves" class="chart-container"></div>
-                  </div>
-                  <div id="insight_s7" class="chart-insight-bar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>Early churn (&lt;6 months) accounts for 58.1% of all churned subscribers and ₹1.24 Cr in lost annual revenue.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="slide-footer">
-              <span>Financial Exposure & Attrition Dynamics</span>
-              <span>Slide 7 of 12 · CLV & Revenue Impact</span>
-            </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 8: Predictive Analysis (Explainable ML)
-               ========================================== -->
-          <section id="slide-7" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Predictive Machine Learning & Risk Scoring</h1>
-                <span class="slide-badge-category">Predictive Intelligence</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-                <span>Pure JS Logistic Regression engine achieves 0.830 ROC AUC, isolating Monthly billing and low engagement as primary churn catalysts.</span>
-              </div>
-            </div>
-
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <!-- Left: Model Metrics, ROC & Feature Importance -->
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                  <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-                    <div class="kpi-card teal" style="padding: 10px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">ROC AUC</span></div>
-                      <div id="ml_kpi_auc" class="kpi-value" style="font-size: 24px;">0.830</div>
-                      <div class="kpi-subtext">Strong discrimination</div>
-                    </div>
-                    <div class="kpi-card purple" style="padding: 10px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">Accuracy</span></div>
-                      <div id="ml_kpi_acc" class="kpi-value" style="font-size: 24px;">75.2%</div>
-                      <div class="kpi-subtext">80/20 test split</div>
-                    </div>
-                    <div class="kpi-card blue" style="padding: 10px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">Precision</span></div>
-                      <div id="ml_kpi_prec" class="kpi-value" style="font-size: 24px;">74.7%</div>
-                      <div class="kpi-subtext">Targeted recall 70.9%</div>
-                    </div>
-                    <div class="kpi-card amber" style="padding: 10px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">F1-Score</span></div>
-                      <div id="ml_kpi_f1" class="kpi-value" style="font-size: 24px;">0.727</div>
-                      <div class="kpi-subtext">Balanced classification</div>
-                    </div>
-                  </div>
-
-                  <!-- Confusion Matrix Summary Bar -->
-                  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; font-size: 13px;">
-                    <div style="font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px;">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="12" x2="21" y2="12"></line><line x1="12" y1="3" x2="12" y2="21"></line></svg>
-                      <span>Holdout Confusion Matrix (N = 1,000)</span>
-                    </div>
-                    <div style="display: flex; gap: 8px;">
-                      <div style="background: #f0fdf4; border: 1px solid #86efac; padding: 4px 10px; border-radius: 4px; text-align: center;">
-                        <span style="font-size: 11px; color: #15803d; display: block; font-weight: 600;">TP (True Churn)</span>
-                        <strong id="cm_tp" style="font-size: 14px; color: #166534;" class="tabular-nums">358</strong>
-                      </div>
-                      <div style="background: #fef2f2; border: 1px solid #fca5a5; padding: 4px 10px; border-radius: 4px; text-align: center;">
-                        <span style="font-size: 11px; color: #b91c1c; display: block; font-weight: 600;">FP (Type I Err)</span>
-                        <strong id="cm_fp" style="font-size: 14px; color: #991b1b;" class="tabular-nums">131</strong>
-                      </div>
-                      <div style="background: #f0fdf4; border: 1px solid #86efac; padding: 4px 10px; border-radius: 4px; text-align: center;">
-                        <span style="font-size: 11px; color: #15803d; display: block; font-weight: 600;">TN (True Active)</span>
-                        <strong id="cm_tn" style="font-size: 14px; color: #166534;" class="tabular-nums">372</strong>
-                      </div>
-                      <div style="background: #fef2f2; border: 1px solid #fca5a5; padding: 4px 10px; border-radius: 4px; text-align: center;">
-                        <span style="font-size: 11px; color: #b91c1c; display: block; font-weight: 600;">FN (Type II Err)</span>
-                        <strong id="cm_fn" style="font-size: 14px; color: #991b1b;" class="tabular-nums">139</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="grid-2col" style="flex: 1;">
-                    <div class="card">
-                      <div class="card-header"><span class="card-title">ROC Curve (AUC = 0.830)</span></div>
-                      <div id="chart_ml_roc" class="chart-container" style="min-height: 220px;"></div>
-                    </div>
-                    <div class="card">
-                      <div class="card-header"><span class="card-title">Feature Importance (Odds Ratios)</span></div>
-                      <div id="chart_ml_features" class="chart-container" style="min-height: 220px;"></div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Right: Interactive Risk Scorer & Top 20 At-Risk Active Customers -->
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                  <!-- Live Scorer Widget -->
-                  <div class="card" style="padding: 12px 14px;">
-                    <div class="card-header" style="margin-bottom: 6px;">
-                      <span class="card-title">Interactive Subscriber Churn Risk Scorer</span>
-                      <span class="badge badge-purple">Real-Time Inference</span>
-                    </div>
-                    <div class="risk-inputs-grid">
-                      <div class="risk-input-item">
-                        <label>Age: <span id="lbl_scorer_age">30</span></label>
-                        <input id="input_scorer_age" type="range" min="18" max="65" value="30" class="sim-range-input">
-                      </div>
-                      <div class="risk-input-item">
-                        <label>Engagement Score: <span id="lbl_scorer_score">45</span></label>
-                        <input id="input_scorer_score" type="range" min="0" max="100" value="45" class="sim-range-input">
-                      </div>
-                      <div class="risk-input-item">
-                        <label>Subscription Plan</label>
-                        <select id="select_scorer_plan" class="slicer-select">
-                          <option value="Monthly" selected>Monthly Plan</option>
-                          <option value="Quarterly">Quarterly Plan</option>
-                          <option value="Annual">Annual Plan</option>
-                        </select>
-                      </div>
-                      <div class="risk-input-item">
-                        <label>Payment Gateway</label>
-                        <select id="select_scorer_payment" class="slicer-select">
-                          <option value="UPI" selected>UPI Auto-Debit</option>
-                          <option value="Card">Credit/Debit Card</option>
-                          <option value="PayPal">PayPal</option>
-                          <option value="Other">Other / NetBanking</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div class="risk-result-display">
-                      <div id="chart_scorer_gauge" class="risk-gauge-container"></div>
-                      <div class="risk-score-details">
-                        <div style="font-size: 12px; color: #64748b;">Predicted Churn Probability</div>
-                        <div id="val_scorer_prob" style="font-size: 26px; font-weight: 800; color: #ef4444;">68.4%</div>
-                        <div id="badge_scorer_tier" class="badge badge-red" style="align-self: flex-start; font-size: 12px;">HIGH RISK ACCOUNT</div>
-                      </div>
-                      <div style="font-size: 12.5px; color: #475569; max-width: 170px; line-height: 1.45;">
-                        <strong>Key Drivers:</strong> Monthly contract (+10.3x odds) and sub-50 engagement.
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Top 20 Active High-Risk Table -->
-                  <div class="card" style="flex: 1;">
-                    <div class="card-header">
-                      <span class="card-title">Top 20 High-Risk ACTIVE Subscribers</span>
-                      <button id="btnExportTop20" class="btn-card-toggle">Download CSV</button>
-                    </div>
-                    <div class="table-responsive">
-                      <table class="bi-table">
-                        <thead>
-                          <tr>
-                            <th>ID</th>
-                            <th>Plan</th>
-                            <th>City</th>
-                            <th class="number">Age</th>
-                            <th class="number">Eng</th>
-                            <th class="number">Prob</th>
-                            <th>Risk Drivers</th>
-                          </tr>
-                        </thead>
-                        <tbody id="tbody_top20_active">
-                          <!-- Filled by app.js -->
-                        </tbody>
-                      </table>
-                    </div>
-                    <div id="insight_s8" class="chart-insight-bar">
-                      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                      <span>Model AUC of 0.830 confirms strong predictive power; subscription type and low engagement account for >70% of risk variance.</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="slide-footer">
-              <span>Pure JS Logistic Regression Model (Gradient Descent, 80/20 Split)</span>
-              <span>Slide 8 of 12 · Predictive Machine Learning</span>
-            </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 9: Retention Simulator (What-If)
-               ========================================== -->
-          <section id="slide-8" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Retention Strategy Simulator (What-If Modeling)</h1>
-                <span class="slide-badge-category">Strategic What-If</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                <span>Simulating strategic interventions reveals a realistic pathway to a 7.2% relative churn reduction, achieving executive goals.</span>
-              </div>
-            </div>
-
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <!-- Left: 4 Interactive Sliders & Impact Cards -->
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                  <div class="card" style="padding: 12px;">
-                    <div class="card-header">
-                      <span class="card-title">Strategic Intervention Control Sliders</span>
-                      <button id="btnResetSimulator" class="btn-card-toggle">Reset Sliders</button>
-                    </div>
-                    <div class="sim-controls-grid">
-                      <!-- Slider 1 -->
-                      <div class="sim-slider-group">
-                        <div class="sim-slider-header">
-                          <span class="sim-slider-label">1. Lift Low Engagement</span>
-                          <span id="lbl_sim_eng" class="sim-slider-val">+15 pts</span>
-                        </div>
-                        <input id="slider_sim_eng" type="range" min="0" max="30" value="15" step="1" class="sim-range-input">
-                        <span class="sim-slider-desc">Improve engagement for users scoring &le;30 via onboarding</span>
-                      </div>
-
-                      <!-- Slider 2 -->
-                      <div class="sim-slider-group">
-                        <div class="sim-slider-header">
-                          <span class="sim-slider-label">2. Shift Monthly &rarr; Quarterly</span>
-                          <span id="lbl_sim_shift" class="sim-slider-val">20%</span>
-                        </div>
-                        <input id="slider_sim_shift" type="range" min="0" max="50" value="20" step="1" class="sim-range-input">
-                        <span class="sim-slider-desc">Upgrade monthly subscribers with contract incentives</span>
-                      </div>
-
-                      <!-- Slider 3 -->
-                      <div class="sim-slider-group">
-                        <div class="sim-slider-header">
-                          <span class="sim-slider-label">3. Curtail Early Churn</span>
-                          <span id="lbl_sim_early" class="sim-slider-val">25%</span>
-                        </div>
-                        <input id="slider_sim_early" type="range" min="0" max="50" value="25" step="1" class="sim-range-input">
-                        <span class="sim-slider-desc">Reduce month 1-5 dropoff via unboxing check-ins</span>
-                      </div>
-
-                      <!-- Slider 4 -->
-                      <div class="sim-slider-group">
-                        <div class="sim-slider-header">
-                          <span class="sim-slider-label">4. High-Risk Retention Offer</span>
-                          <span id="lbl_sim_discount" class="sim-slider-val">10%</span>
-                        </div>
-                        <input id="slider_sim_discount" type="range" min="0" max="30" value="10" step="1" class="sim-range-input">
-                        <span class="sim-slider-desc">Targeted discount coupon on renewal for high-risk accounts</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Goal Progress Bar -->
-                  <div class="card" style="padding: 14px 16px; background: #ffffff;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                      <span style="font-size: 14px; font-weight: 700; color: #1e293b;">Executive Goal Progress: 5%–10% Relative Churn Reduction</span>
-                      <span id="simGoalBadge" class="badge badge-green" style="font-size: 12px;">GOAL ACHIEVED (7.2% REDUCTION)</span>
-                    </div>
-                    <div style="width: 100%; height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; position: relative;">
-                      <div id="simProgressBar" style="width: 72%; height: 100%; background: linear-gradient(90deg, #6366f1, #10b981); transition: width 0.3s ease;"></div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-top: 6px;">
-                      <span>0% (Baseline 47.1%)</span>
-                      <span style="font-weight: 700; color: #10b981;">Min Target: 5.0%</span>
-                      <span style="font-weight: 800; color: #047857;">Max Target: 10.0%</span>
-                    </div>
-                  </div>
-
-                  <!-- Impact Summary Cards: 2x2 Grid for Zero Truncation -->
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <div class="kpi-card purple" style="padding: 12px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">Projected Churn Rate</span></div>
-                      <div id="sim_kpi_proj_rate" class="kpi-value" style="font-size: 26px;">39.85%</div>
-                      <div class="kpi-subtext">Baseline: <span id="sim_kpi_base_rate" class="tabular-nums">47.08%</span></div>
-                    </div>
-                    <div class="kpi-card teal" style="padding: 12px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">Subscribers Saved</span></div>
-                      <div id="sim_kpi_saved_cust" class="kpi-value" style="font-size: 26px;">+361</div>
-                      <div class="kpi-subtext">Retained active accounts</div>
-                    </div>
-                    <div class="kpi-card amber" style="padding: 12px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">6-Month Saved Revenue</span></div>
-                      <div id="sim_kpi_rev_6m" class="kpi-value" style="font-size: 26px;">₹18.9 L</div>
-                      <div class="kpi-subtext">Immediate fiscal cycle</div>
-                    </div>
-                    <div class="kpi-card green" style="padding: 12px 14px;">
-                      <div class="kpi-card-header"><span class="kpi-label">Annualised Value Created</span></div>
-                      <div id="sim_kpi_rev_annual" class="kpi-value" style="font-size: 26px;">₹37.8 L</div>
-                      <div class="kpi-subtext">Full year value created</div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Right: Before vs After Waterfall / Bar Chart -->
-                <div class="card" style="flex: 1;">
-                  <div class="card-header">
-                    <span class="card-title">Before vs After Projected Churn Rate & Customer Mix</span>
-                  </div>
-                  <div id="chart_sim_comparison" class="chart-container"></div>
-                  <div style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 6px 10px; background: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0;">
-                    <em>Simulation Assumptions:</em> Linear elasticity model based on empirical logistic regression marginal effects. Churn mitigation realizes over a 6-month ramp-up window. Discount cost is netted out from gross savings.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="slide-footer">
-              <span>Interactive Strategic What-If Sensitivity Simulator</span>
-              <span>Slide 9 of 12 · Retention Simulator</span>
-            </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 10: Recommendations & Roadmap
-               ========================================== -->
-          <section id="slide-9" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Strategic Recommendations & Implementation Roadmap</h1>
-                <span class="slide-badge-category">Actionable Roadmap</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                <span>A disciplined two-phase roadmap: Quick Wins (0-30 days) to stem early attrition, followed by Structural Transformation (3-6 months).</span>
-              </div>
-            </div>
-
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <!-- Column 1: Quick Wins (0-30 Days) -->
-                <div class="card" style="border-top: 4px solid #10b981;">
-                  <div class="card-header">
-                    <span class="card-title" style="color: #047857;">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                      Phase 1: Quick Wins (0–30 Days)
-                    </span>
-                    <span class="badge badge-green">Immediate ROI</span>
-                  </div>
-                  <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px; color: #334155; line-height: 1.6;">
-                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #065f46; font-size: 15px; display: block;">1. Onboarding Engagement Sprint (Days 1–14):</strong>
-                      <p style="margin-top: 4px;">Deploy automated WhatsApp unboxing guides, digital product previews, and a 1-click rating widget. Lifts low-engagement scores past the 40-point safety line, neutralizing early novelty decay.</p>
-                      <div style="margin-top: 6px; font-weight: 700; color: #047857; font-size: 13.5px;">Expected Impact: -3.2% Churn · ₹6.8 L Saved</div>
-                    </div>
-                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #065f46; font-size: 15px; display: block;">2. Monthly-to-Quarterly Upgrade Campaign:</strong>
-                      <p style="margin-top: 4px;">Target Monthly subscribers at Month 2 with a ₹299 upgrade voucher for switching to a Quarterly plan. Directly mitigates the 60.6% monthly churn rate.</p>
-                      <div style="margin-top: 6px; font-weight: 700; color: #047857; font-size: 13.5px;">Expected Impact: -2.8% Churn · ₹8.5 L Saved</div>
-                    </div>
-                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #065f46; font-size: 15px; display: block;">3. UPI / Auto-Debit Smart Dunning Logic:</strong>
-                      <p style="margin-top: 4px;">Implement automated payment retry cascades and instant WhatsApp payment links for failed recurring UPI transactions to prevent involuntary churn.</p>
-                      <div style="margin-top: 6px; font-weight: 700; color: #047857; font-size: 13.5px;">Expected Impact: -1.4% Churn · ₹4.2 L Saved</div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Column 2: Long-Term Strategies (3-6 Months) -->
-                <div class="card" style="border-top: 4px solid #6366f1;">
-                  <div class="card-header">
-                    <span class="card-title" style="color: #4338ca;">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
-                      Phase 2: Scaled Strategies (3–6 Months)
-                    </span>
-                    <span class="badge badge-purple">Structural Lift</span>
-                  </div>
-                  <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px; color: #334155; line-height: 1.6;">
-                    <div style="background: #f5f3ff; border: 1px solid #ddd6fe; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #4c1d95; font-size: 15px; display: block;">1. Box Customization & Preference Engine:</strong>
-                      <p style="margin-top: 4px;">Permit subscribers to swap 1 of their monthly items or choose their monthly scent/flavor profile. Solves subscription fatigue for customers past month 6.</p>
-                      <div style="margin-top: 6px; font-weight: 700; color: #5b21b6; font-size: 13.5px;">Expected Impact: +18% Retention at Month 12</div>
-                    </div>
-                    <div style="background: #f5f3ff; border: 1px solid #ddd6fe; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #4c1d95; font-size: 15px; display: block;">2. Real-Time CRM Churn Early Warning Integration:</strong>
-                      <p style="margin-top: 4px;">Embed the logistic regression scoring engine directly into the CRM. When an active customer's predicted risk crosses 65%, trigger automated concierge outreach and loyalty credits.</p>
-                      <div style="margin-top: 6px; font-weight: 700; color: #5b21b6; font-size: 13.5px;">Expected Impact: -2.1% Churn across high-risk tier</div>
-                    </div>
-                    <div style="background: #f5f3ff; border: 1px solid #ddd6fe; padding: 12px 14px; border-radius: 6px;">
-                      <strong style="color: #4c1d95; font-size: 15px; display: block;">3. Annual Membership VIP Tier:</strong>
-                      <p style="margin-top: 4px;">Launch "Boxify Club Elite" for Annual members with free anniversary gifts, early access to limited editions, and concierge support to anchor high-CLV accounts.</p>
-                      <div style="margin-top: 6px; font-weight: 700; color: #5b21b6; font-size: 13.5px;">Expected Impact: +25% Annual plan adoption</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Governance KPI Table -->
-              <div class="card" style="padding: 14px 16px;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                  <span style="font-size: 14.5px; font-weight: 700; color: #1e293b;">Executive Governance & KPI Scorecard to Monitor</span>
-                  <span style="font-size: 12px; color: #64748b; font-weight: 600;">Review Frequency: Bi-Weekly</span>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px;">
-                  <div style="background: #f8fafc; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
-                    <div style="color: #64748b; font-weight: 600;">Leading Indicator 1</div>
-                    <strong style="color: #0f172a; font-size: 14px; display: block; margin: 2px 0;">14-Day App Engagement &ge; 50</strong>
-                    <div style="color: #10b981; font-weight: 700; font-size: 12.5px;">Target: &gt;70% of new signups</div>
-                  </div>
-                  <div style="background: #f8fafc; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
-                    <div style="color: #64748b; font-weight: 600;">Leading Indicator 2</div>
-                    <strong style="color: #0f172a; font-size: 14px; display: block; margin: 2px 0;">Quarterly Plan Mix %</strong>
-                    <div style="color: #10b981; font-weight: 700; font-size: 12.5px;">Target: &gt;45% of active base</div>
-                  </div>
-                  <div style="background: #f8fafc; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
-                    <div style="color: #64748b; font-weight: 600;">Lagging Indicator 1</div>
-                    <strong style="color: #0f172a; font-size: 14px; display: block; margin: 2px 0;">Month-over-Month Churn Rate</strong>
-                    <div style="color: #10b981; font-weight: 700; font-size: 12.5px;">Target: &le; 3.5% monthly</div>
-                  </div>
-                  <div style="background: #f8fafc; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
-                    <div style="color: #64748b; font-weight: 600;">Lagging Indicator 2</div>
-                    <strong style="color: #0f172a; font-size: 14px; display: block; margin: 2px 0;">Cohort 6-Month Retention</strong>
-                    <div style="color: #10b981; font-weight: 700; font-size: 12.5px;">Target: &ge; 78% (from 72%)</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="slide-footer">
-              <span>Executive Implementation Playbook</span>
-              <span>Slide 10 of 12 · Recommendations & Roadmap</span>
-            </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 11: APPENDIX A1 - Methodology & Math
-               ========================================== -->
-          <section id="slide-10" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Appendix A1: Methodology & Mathematical Formulations</h1>
-                <span class="slide-badge-category">Technical Reference</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-                <span>Rigorous statistical and machine learning foundations implemented in pure, dependency-free JavaScript.</span>
-              </div>
-            </div>
-
-            <div class="slide-body">
-              <div class="grid-2col" style="flex: 1;">
-                <div class="card" style="flex: 1;">
-                  <div class="card-header"><span class="card-title" style="font-size: 16.5px;">1. Derived Business Metrics Formulations</span></div>
-                  <div style="font-size: 14px; line-height: 1.65; color: #1e293b; display: flex; flex-direction: column; gap: 14px;">
-                    <div>
-                      <strong>Tenure (Months):</strong> Calculated as exact completed calendar months from <code>JoinDate</code> to <code>CancelDate</code> (or 2026-11-21 if active):
-                      <pre class="formula-box" style="margin-top: 6px;">Tenure = max(0,
-  (End.Year &minus; Start.Year) &times; 12
-  + End.Month &minus; Start.Month
-  &minus; (End.Day &lt; Start.Day ? 1 : 0)
-)</pre>
-                    </div>
-                    <div>
-                      <strong>Monthly Run Rate (INR):</strong> Derived as <code>TotalSpent / max(TenureMonths, 1)</code>.
-                    </div>
-                    <div>
-                      <strong>Annualised Lost Revenue:</strong> Expressed as <code>&sum; (MonthlyRate &times; 12)</code> for all churned accounts.
-                    </div>
-                    <div>
-                      <strong>Monthly Cohort Churn Rate:</strong> Cancellations during month M divided by total subscribers active at the beginning of month M:
-                      <pre class="formula-box" style="margin-top: 6px;">Monthly Churn Rate =
-  CancelCount(Month M) / ActiveSubscribers(Start of M)</pre>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="card" style="flex: 1;">
-                  <div class="card-header"><span class="card-title" style="font-size: 16.5px;">2. In-Browser Logistic Regression Architecture</span></div>
-                  <div style="font-size: 14px; line-height: 1.65; color: #1e293b; display: flex; flex-direction: column; gap: 14px;">
-                    <div>
-                      <strong>Binary Classification Formulation:</strong> Churn probability <code>P(y=1|X)</code> modeled via standard Sigmoid activation:
-                      <pre class="formula-box" style="margin-top: 6px;">P(y=1|X) = 1 / (1 + exp(-(&beta;0 + &sum; &beta;i &middot; Xi)))</pre>
-                    </div>
-                    <div>
-                      <strong>Optimization:</strong> Cross-entropy loss minimized via deterministic gradient descent (learning rate &alpha; = 0.5, 500 epochs).
-                    </div>
-                    <div>
-                      <strong>Evaluated Features:</strong> Normalized Age, Normalized Engagement Score, Subscription Plan (Monthly/Quarterly with Annual reference), Payment Gateway (UPI/Other with Card reference), and Location Tier (Tier 2 vs Metro).
-                    </div>
-                    <div>
-                      <strong>AUC-ROC Calculation:</strong> Derived analytically using the Mann-Whitney U test statistic over the independent 20% test holdout set.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="slide-footer">
-              <span>Statistical & Algorithmic Documentation</span>
-              <span>Slide 11 of 12 · Technical Appendix</span>
-            </div>
-          </section>
-
-          <!-- ==========================================
-               SLIDE 12: APPENDIX A2 - Full Segment Master Table
-               ========================================== -->
-          <section id="slide-11" class="slide">
-            <div class="slide-header">
-              <div class="slide-title-line">
-                <h1 class="slide-main-title">Appendix A2: Segment Breakdown Master Table</h1>
-                <span class="slide-badge-category">Master Data Grid</span>
-              </div>
-              <div class="slide-takeaway-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                <span>Complete granular breakdown across all customer dimensions with sorting, search, and CSV export.</span>
-              </div>
-            </div>
-
-            <div class="slide-body">
-              <div class="card" style="flex: 1;">
-                <div class="card-header">
-                  <div style="display: flex; align-items: center; gap: 10px;">
-                    <span class="card-title">Comprehensive Segment Master Grid</span>
-                    <input id="inputSearchSegments" type="text" placeholder="Search segment..." style="font-size: 11px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px;">
-                  </div>
-                  <button id="btnExportFullSegments" class="btn-card-toggle">Download Full CSV</button>
-                </div>
-                <div class="table-responsive">
-                  <table class="bi-table">
-                    <thead>
-                      <tr>
-                        <th>Plan Type</th>
-                        <th>Location</th>
-                        <th>Age Group</th>
-                        <th>Payment Mode</th>
-                        <th class="number">Total Cust</th>
-                        <th class="number">Active</th>
-                        <th class="number">Churned</th>
-                        <th class="number">Churn Rate</th>
-                        <th class="number">Avg Engagement</th>
-                        <th class="number">Avg CLV</th>
-                        <th class="number">Lost Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody id="tbody_master_segments">
-                      <!-- Filled by app.js -->
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <div class="slide-footer">
-              <span>Granular Multi-Dimensional Segment Grid</span>
-              <span>Slide 12 of 12 · Master Data Grid</span>
-            </div>
-          </section>
-
-        </div>
       </main>
     </div>
 
-    <!-- Data & Methods Modal -->
-    <div id="dataMethodsModal" class="modal-overlay">
-      <div class="modal-window">
-        <div class="modal-header">
-          <div class="modal-title">Boxify Analytics: Data, Assumptions & Formulations</div>
-          <button id="btnCloseModal" class="modal-close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <h3 style="font-size: 14px; color: #0f172a; margin-bottom: 4px;">1. Data Provenance & Snapshots</h3>
-          <p>This analytics deliverable analyzes <strong>5,000 subscriber records</strong> from <code>boxify_customers.csv</code> spanning from <strong>23 November 2023 to 21 November 2026</strong>. The snapshot anchor date is set to <strong>2026-11-21</strong>.</p>
-          
-          <h3 style="font-size: 14px; color: #0f172a; margin-top: 10px; margin-bottom: 4px;">2. Derived Fields & Formulas</h3>
-          <ul style="margin-left: 20px; display: flex; flex-direction: column; gap: 6px;">
-            <li><strong>Churned:</strong> Customer records with non-empty <code>CancelDate</code>.</li>
-            <li><strong>Tenure (Months):</strong> Calendar months between <code>JoinDate</code> and <code>CancelDate</code> (or 2026-11-21 for active members).</li>
-            <li><strong>Monthly Rate:</strong> <code>TotalSpent / max(TenureMonths, 1)</code>.</li>
-            <li><strong>Annualised Lost Revenue:</strong> <code>&sum; (MonthlyRate &times; 12)</code> for churned accounts.</li>
-            <li><strong>Early Churn:</strong> Churned customers with <code>TenureMonths &lt; 6</code>.</li>
-            <li><strong>Monthly Cohort Churn Rate:</strong> Cancellations in month M divided by customers active at start of month M.</li>
-          </ul>
-
-          <h3 style="font-size: 14px; color: #0f172a; margin-top: 10px; margin-bottom: 4px;">3. Analytical Constraints & Business Assumptions</h3>
-          <ul style="margin-left: 20px; display: flex; flex-direction: column; gap: 6px;">
-            <li>All subscriptions renew on a monthly cycle.</li>
-            <li>Cancellations occur strictly at the end of billing cycles (no pro-rata refunds).</li>
-            <li>Currency is Indian Rupee (₹ INR) with standard Lakh/Crore conversions (1 Lakh = 100,000; 1 Crore = 10,000,000).</li>
-          </ul>
-        </div>
+    <!-- FOOTER -->
+    <footer id="app-footer">
+      <div class="footer-left">
+        <button class="nav-btn" id="btn-prev-slide">← Prev</button>
+        <span id="footer-slide-indicator" style="font-size:12px; font-weight:700;">Slide 1 / 12</span>
+        <button class="nav-btn" id="btn-next-slide">Next →</button>
       </div>
-    </div>
-
-    <!-- Fallback Manual Data Drop Zone -->
-    <div id="dropzoneOverlay" class="dropzone-overlay">
-      <div class="dropzone-box">
-        <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="17 8 12 3 7 8"></polyline>
-          <line x1="12" y1="3" x2="12" y2="15"></line>
-        </svg>
-        <div class="dropzone-title">Select boxify_customers.csv</div>
-        <p class="dropzone-desc">Browsers block direct file access under certain local configurations. Drag and drop <strong>boxify_customers.csv</strong> from this folder, or click below to select it.</p>
-        <input type="file" id="manualFileInput" accept=".csv" style="display: none;">
-        <button id="btnBrowseFile" class="btn-action active" style="padding: 10px 20px; font-size: 14px;">Select CSV File</button>
-        <span style="font-size: 11px; color: #64748b;">All computation runs 100% locally in your browser.</span>
-      </div>
-    </div>
-
+      <div class="footer-center"><div class="slide-dots" id="slide-dots"></div></div>
+      <div class="footer-right"><span style="font-size:11px; color:var(--text-dim);">Keys: ←/→ · 1-9 · M Meet · F Full · G Grid · N Notes · D Diag · ? Help</span></div>
+    </footer>
   </div>
 
-  <!-- Main Application Script -->
+  <div id="bx-floating-tooltip" role="tooltip"></div>
+  <div id="meeting-spotlight"></div>
+
+  <!-- Speaker Notes -->
+  <aside class="side-drawer" id="speaker-notes-drawer">
+    <div style="display:flex; justify-content:space-between; align-items:center;"><strong>📝 Presenter Script & Q&A</strong><button class="modal-close-btn" id="btn-close-notes">×</button></div>
+    <div id="speaker-notes-body" style="display:flex; flex-direction:column; gap:10px; font-size:13px; color:var(--text-muted); line-height:1.5;"></div>
+  </aside>
+
+  <!-- Diagnostics -->
+  <aside class="side-drawer" id="diagnostics-drawer">
+    <div style="display:flex; justify-content:space-between; align-items:center;"><strong style="color:var(--color-accent);">🩺 Chart Diagnostics</strong><button class="modal-close-btn" id="btn-close-diag">×</button></div>
+    <div id="diagnostics-body" style="display:flex; flex-direction:column; gap:8px; font-size:12px;"></div>
+  </aside>
+
+  <!-- Glossary Modal -->
+  <div class="modal-overlay" id="glossary-modal">
+    <div class="modal-card" style="max-width:660px;">
+      <div class="modal-header"><h3 style="font-size:16px; font-weight:800;">📖 Plain-English Glossary</h3><button class="modal-close-btn" id="btn-close-glossary">×</button></div>
+      <div class="modal-body">
+        <table class="bi-table">
+          <thead><tr><th>Plain Term</th><th>Analyst Name</th><th>Meaning & Boxify Example</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Customers who left</strong></td><td>Churn Rate</td><td>% who cancelled. Boxify: 2,354 of 5,000 left (~47.1%).</td></tr>
+            <tr><td><strong>Value per customer</strong></td><td>CLV</td><td>Total ₹ spent before cancelling or to date.</td></tr>
+            <tr><td><strong>How active they are</strong></td><td>Engagement Score</td><td>0–100 activity rating. Under 40 = high risk.</td></tr>
+            <tr><td><strong>Customers who stay</strong></td><td>Retention / Survival</td><td>% still active after Month 3, 6, or 12.</td></tr>
+            <tr><td><strong>Tends to go together</strong></td><td>Correlation</td><td>Two patterns moving together (doesn't prove cause).</td></tr>
+            <tr><td><strong>Simple prediction model</strong></td><td>Logistic Regression</td><td>Scores active customers on risk using 80/20 test split.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Focus Modal -->
+  <div class="modal-overlay" id="focus-modal">
+    <div class="modal-card"><div class="modal-header"><h3 id="focus-modal-title">Expanded Chart</h3><button class="modal-close-btn" id="btn-close-focus">×</button></div><div class="modal-body"><div id="focus-chart-container"></div></div></div>
+  </div>
+
+  <!-- Overview Grid -->
+  <div class="modal-overlay" id="overview-modal">
+    <div class="modal-card"><div class="modal-header"><h3>Slide Overview (12 Slides)</h3><button class="modal-close-btn" id="btn-close-overview">×</button></div><div class="modal-body"><div class="overview-grid" id="overview-grid"></div></div></div>
+  </div>
+
+  <!-- Tour Modal -->
+  <div class="modal-overlay" id="tour-modal">
+    <div class="modal-card" style="max-width:520px;">
+      <div class="modal-header"><h3 id="tour-step-title">Welcome to Boxify Insights</h3><button class="modal-close-btn" id="btn-close-tour">×</button></div>
+      <div class="modal-body">
+        <p id="tour-step-desc" style="line-height:1.5; color:var(--text-muted);"></p>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span id="tour-step-counter" style="font-size:12px; font-weight:700; color:var(--color-accent);">Step 1 of 4</span>
+          <div style="display:flex; gap:8px;"><button class="nav-btn" id="btn-tour-skip">Skip</button><button class="hdr-btn primary" id="btn-tour-next">Next →</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual CSV Loader -->
+  <div id="fallback-loader">
+    <div class="drop-zone">
+      <h2>Load Boxify Dataset</h2>
+      <p style="color:var(--text-muted); font-size:13px;">Select <code>boxify_customers.csv</code> locally — nothing is uploaded anywhere.</p>
+      <input type="file" id="manual-csv-input" accept=".csv" style="margin:0 auto;">
+    </div>
+  </div>
+
+  <script src="data.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

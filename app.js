@@ -1,2675 +1,781 @@
-/**
- * Boxify Customer Churn Analysis & Retention Strategy
- * Senior Data-Visualization & BI Presentation Engine
- * Pure Vanilla JavaScript (No Build Step, Dependency-Free Core)
- */
-
-(function () {
+/* ==========================================================================
+   BOXIFY CUSTOMER CHURN ANALYSIS — STORY-DRIVEN NON-TECHNICAL BI ENGINE
+   Load: ./boxify_customers.csv -> ./data.js (window.BOXIFY_DATA) -> Picker
+   ========================================================================== */
+(() => {
   'use strict';
 
-  // =========================================================================
-  // 1. CONFIGURATION & STATE MANAGEMENT
-  // =========================================================================
+  const SNAPSHOT_DATE = '2026-11-21';
+  const REQUIRED_COLS = ['CustomerID', 'JoinDate', 'CancelDate', 'Age', 'Gender', 'Location', 'SubscriptionType', 'TotalSpent', 'BoxesReceived', 'EngagementScore', 'PaymentMode'];
+  const PLAN_ORDER = ['Monthly', 'Quarterly', 'Annual'];
+  const ENG_ORDER = ['Low (0-39)', 'Medium (40-69)', 'High (70-100)'];
+  const AGE_ORDER = ['18-25', '26-35', '36-45', '46+'];
 
-  const CONFIG = {
-    snapshotDate: '2026-11-21',
-    totalExpectedRows: 5000,
-    colors: {
-      primary: '#6366f1',
-      primaryLight: '#e0e7ff',
-      teal: '#0d9488',
-      tealLight: '#ccfbf1',
-      amber: '#f59e0b',
-      amberLight: '#fef3c7',
-      coral: '#ef4444',
-      coralLight: '#fee2e2',
-      green: '#10b981',
-      greenLight: '#d1fae5',
-      slate: '#64748b',
-      slateLight: '#f1f5f9',
-      dark: '#0f172a',
-      cardBg: '#ffffff'
-    },
-    tier2Cities: new Set(['Ahmedabad', 'Jaipur', 'Lucknow', 'Indore', 'Bhopal'])
-  };
+  const SLIDE_META = [
+    { title: 'Case Overview', script: 'Boxify delivers monthly lifestyle boxes across India. Over the past year, early cancellations before month 6 rose sharply. Today we show who is leaving, why it happens, and how we can cut cancellations by 5–10% in 6 months.', qa: 'Q: Does this include outside market data? A: No, 100% comes from our 5,000 customer records.' },
+    { title: 'Executive Summary', script: 'Almost half of all subscribers—about 47 in every 100—have cancelled. Monthly plan members leave far more often than Annual members, and quiet subscribers leave fastest.', qa: 'Q: How many active customers do we have today? A: 2,646 active subscribers as of Nov 21, 2026.' },
+    { title: 'Our Data', script: 'We checked all 5,000 customer records across 11 verified columns. There are zero duplicates, and blank cancel dates mean the customer is still active today.', qa: 'Q: Are any numbers guessed? A: No, derived fields like Months Stayed are calculated directly from dates.' },
+    { title: 'Churn Over Time & Survival', script: 'Looking at when people leave, the biggest drop-off happens in the first 6 months. Once a subscriber passes month 6, they tend to stay much longer.', qa: 'Q: Why is month 6 so important? A: Most early quitters decide whether the box fits their lifestyle by box 4 to 6.' },
+    { title: 'Who Leaves? Segments', script: 'Plan type is the clearest divider: Monthly subscribers cancel nearly twice as often as Annual subscribers. Younger buyers (18–25) also leave slightly more often.', qa: 'Q: Should we stop offering Monthly plans? A: Keep Monthly for trial, but encourage upgrading to Quarterly by month 3.' },
+    { title: 'Activity & Leaving', script: 'Customers with low activity scores leave more than twice as often as highly active fans. Low activity and leaving tend to go together, though data alone cannot prove which causes which.', qa: 'Q: Can we test if boosting activity saves people? A: Yes, through a small A/B test on quiet subscribers.' },
+    { title: 'Customer Value', script: 'Active customers spend over 2.5 times more than those who cancel. Every early cancellation costs us recurring revenue that compounds over a 12-month cycle.', qa: 'Q: How is annualised revenue lost calculated? A: It projects each leaver’s monthly value across a 12-month cycle.' },
+    { title: 'Predicting Who May Leave', script: 'We trained a simple prediction model on 80% of customers and tested it on the remaining 20%. It flags likely leavers early so our team can reach out before they cancel.', qa: 'Q: How accurate is it? A: It correctly flags about 7 to 8 out of every 10 leavers in plain testing.' },
+    { title: 'Retention Simulator', script: 'This interactive tool lets us test combinations of keeping quiet users active, moving Monthly buyers to Quarterly plans, and offering targeted perks to hit our 5–10% reduction goal.', qa: 'Q: Is this a guarantee? A: No, it is an indicative scenario tool to compare which levers help most.' },
+    { title: 'Retention Playbook', script: 'Here are four plain-English groups—Early Quitters, Quiet Subscribers, Month-to-Month Movers, and Loyal Champions—each with a Monday-morning action.', qa: 'Q: Which group gives the fastest win? A: Quiet Subscribers on Monthly plans who are still active right now.' },
+    { title: 'Action Roadmap', script: 'We split our plan into 30-day Quick Wins like reaching out to top at-risk users, and 3-to-6 month Long-Term upgrades like box personalization.', qa: 'Q: Who owns the first step? A: CRM and Lifecycle Marketing in Weeks 1–4.' },
+    { title: 'Final Recommendations & Assumptions', script: 'Our top 5 actions are tied directly to the 7 assumptions on the right. To close the loop, we recommend adding a 1-question exit survey to learn exact cancel reasons.', qa: 'Q: What is the single biggest takeaway? A: Guiding Monthly buyers past Month 6 is our fastest path to 5–10% lower churn.' }
+  ];
 
   const state = {
-    allCustomers: [],
-    filteredCustomers: [],
-    filters: {
-      subscription: 'ALL',
-      location: 'ALL',
-      ageGroup: 'ALL',
-      payment: 'ALL',
-      gender: 'ALL',
-      joinYear: 'ALL',
-      status: 'ALL'
-    },
+    rawRows: [],
+    cleanRows: [],
+    explainSimply: true,
     currentSlide: 0,
-    totalSlides: 12,
-    isPresenterMode: false,
-    isSlicerOpen: true,
-    charts: {},
-    tableViews: {},
-    mlModel: null,
-    testSetMetrics: null,
-    simulator: {
-      engLift: 15,
-      monthlyShiftPct: 20,
-      earlyChurnReductionPct: 25,
-      discountPct: 10
-    }
+    zoomLevel: 100,
+    theme: 'light',
+    s8TableView: false,
+    filters: { status: new Set(), plans: new Set(), engBands: new Set(), ageGroups: new Set(), location: '', payModes: new Set(), genders: new Set(), joinYears: new Set() },
+    sim: { eng: 15, plan: 15, early: 15, offer: 20 },
+    model: { weights: null, testAcc: 0, testPrec: 0, testRec: 0, factors: [] },
+    resizeObservers: new Map()
   };
 
-  // =========================================================================
-  // 2. DATA PROCESSING & DERIVED ATTRIBUTES
-  // =========================================================================
-
-  function getMonthsBetween(d1, d2) {
-    let months = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
-    if (d2.getDate() < d1.getDate()) {
-      months--;
+  const safeDiv = (n, d, fb = 0) => (d && Number.isFinite(d) && d !== 0 ? n / d : fb);
+  const fmtINR = (val, compact = false) => {
+    if (!Number.isFinite(val)) return '₹0';
+    const abs = Math.abs(val), s = val < 0 ? '-' : '';
+    if (compact) {
+      if (abs >= 10000000) return `${s}₹${(abs / 10000000).toFixed(2)} Cr`;
+      if (abs >= 100000) return `${s}₹${(abs / 100000).toFixed(2)}L`;
+      if (abs >= 1000) return `${s}₹${(abs / 1000).toFixed(1)}K`;
     }
-    return Math.max(0, months);
+    return `${s}₹${Math.round(abs).toLocaleString('en-IN')}`;
+  };
+  const fmtNum = v => (Number.isFinite(v) ? Math.round(v).toLocaleString('en-IN') : '0');
+  const fmtPct = (v, d = 1) => (Number.isFinite(v) ? `${v.toFixed(d)}%` : '0.0%');
+  const tLbl = (plain, analyst) => (state.explainSimply ? plain : analyst);
+
+  function monthsBetween(d1Str, d2Str) {
+    const a = new Date(d1Str + 'T00:00:00'), b = new Date(d2Str + 'T00:00:00');
+    const diff = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + (b.getDate() >= a.getDate() ? 0 : -1);
+    return Math.max(1, diff);
   }
 
-  function getAgeGroup(age) {
-    if (age < 25) return '18-24';
-    if (age < 35) return '25-34';
-    if (age < 45) return '35-44';
-    if (age < 55) return '45-54';
-    return '55+';
-  }
+  function parseAndClean(rows, sourceName, via) {
+    if (!rows || !rows.length) return false;
+    const cols = Object.keys(rows[0]);
+    const miss = REQUIRED_COLS.filter(c => !cols.includes(c));
+    if (miss.length) { alert(`Missing columns: ${miss.join(', ')}`); return false; }
 
-  function getEngagementBand(score) {
-    if (score <= 30) return 'Low (0-30)';
-    if (score <= 60) return 'Medium (31-60)';
-    return 'High (61-100)';
-  }
+    const seen = new Set(), cleaned = [];
+    for (const r of rows) {
+      const id = String(r.CustomerID || '').trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
 
-  function parseCustomerRow(row) {
-    const cid = (row.CustomerID || row.customer_id || '').trim();
-    const joinDateStr = (row.JoinDate || row.join_date || '').trim();
-    const cancelDateStr = (row.CancelDate || row.cancel_date || '').trim();
-    
-    if (!cid || !joinDateStr) return null;
+      const joinDate = String(r.JoinDate || '').trim().slice(0, 10);
+      const cancelDate = String(r.CancelDate || '').trim().slice(0, 10);
+      const churned = cancelDate !== '';
+      const endRef = churned ? cancelDate : SNAPSHOT_DATE;
+      const tenure = monthsBetween(joinDate, endRef);
+      const age = Number(r.Age) || 30;
+      const eng = Number(r.EngagementScore) || 0;
+      const spent = Number(r.TotalSpent) || 0;
+      const boxes = Number(r.BoxesReceived) || 1;
 
-    const joinDate = new Date(joinDateStr);
-    const hasCanceled = cancelDateStr !== '';
-    const cancelDate = hasCanceled ? new Date(cancelDateStr) : null;
-    const snapDate = new Date(CONFIG.snapshotDate);
-    const endDate = hasCanceled ? cancelDate : snapDate;
+      const ageGroup = age <= 25 ? '18-25' : age <= 35 ? '26-35' : age <= 45 ? '36-45' : '46+';
+      const engBand = eng < 40 ? 'Low (0-39)' : eng < 70 ? 'Medium (40-69)' : 'High (70-100)';
 
-    const tenureMonths = getMonthsBetween(joinDate, endDate);
-    const age = parseInt(row.Age || row.age || '0', 10);
-    const totalSpent = parseFloat(row.TotalSpent || row.total_spent || '0');
-    const boxesReceived = parseInt(row.BoxesReceived || row.boxes_received || '0', 10);
-    const score = parseFloat(row.EngagementScore || row.engagement_score || '0');
-    const monthlyRate = totalSpent / Math.max(tenureMonths, 1);
-    const isEarlyChurn = hasCanceled && tenureMonths < 6;
-
-    const subType = (row.SubscriptionType || row.subscription_type || 'Monthly').trim();
-    const location = (row.Location || row.location || 'Unknown').trim();
-    const paymentMode = (row.PaymentMode || row.payment_mode || 'Other').trim();
-    const gender = (row.Gender || row.gender || 'Other').trim();
-
-    const joinYear = joinDate.getFullYear().toString();
-    const joinQuarter = `${joinDate.getFullYear()}-Q${Math.floor(joinDate.getMonth() / 3) + 1}`;
-
-    return {
-      customerId: cid,
-      joinDateStr: joinDateStr,
-      cancelDateStr: cancelDateStr,
-      joinDate: joinDate,
-      cancelDate: cancelDate,
-      isChurned: hasCanceled,
-      age: age,
-      ageGroup: getAgeGroup(age),
-      gender: gender,
-      location: location,
-      isTier2: CONFIG.tier2Cities.has(location),
-      subscriptionType: subType,
-      totalSpent: totalSpent,
-      boxesReceived: boxesReceived,
-      engagementScore: score,
-      engagementBand: getEngagementBand(score),
-      paymentMode: paymentMode,
-      tenureMonths: tenureMonths,
-      monthlyRate: monthlyRate,
-      clv: totalSpent,
-      isEarlyChurn: isEarlyChurn,
-      joinYear: joinYear,
-      joinQuarter: joinQuarter
-    };
-  }
-
-  // =========================================================================
-  // 3. DATA LOADING PIPELINE (FETCH -> BACKUP DATA.JS -> MANUAL PICKER)
-  // =========================================================================
-
-  function parseCSVText(csvText) {
-    if (window.Papa && typeof window.Papa.parse === 'function') {
-      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-      return parsed.data;
-    }
-    // Pure JS Fallback CSV Parser
-    const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-    const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-      const currentLine = lines[i];
-      const values = [];
-      let insideQuote = false;
-      let curVal = '';
-      for (let j = 0; j < currentLine.length; j++) {
-        const char = currentLine[j];
-        if (char === '"') {
-          insideQuote = !insideQuote;
-        } else if (char === ',' && !insideQuote) {
-          values.push(curVal.trim().replace(/^["']|["']$/g, ''));
-          curVal = '';
-        } else {
-          curVal += char;
-        }
-      }
-      values.push(curVal.trim().replace(/^["']|["']$/g, ''));
-      const obj = {};
-      headers.forEach((h, idx) => {
-        obj[h] = values[idx] || '';
-      });
-      rows.push(obj);
-    }
-    return rows;
-  }
-
-  function initializeWithRawRows(rows, loadSource) {
-    const processed = [];
-    rows.forEach(r => {
-      const item = parseCustomerRow(r);
-      if (item) processed.push(item);
-    });
-
-    state.allCustomers = processed;
-    state.filteredCustomers = [...processed];
-
-    const statusBadgeText = document.getElementById('dataStatusText');
-    if (statusBadgeText) {
-      statusBadgeText.textContent = `Data: boxify_customers.csv · ${processed.length.toLocaleString()} rows · ${loadSource}`;
-    }
-
-    // Hide manual dropzone if open
-    const dropzone = document.getElementById('dropzoneOverlay');
-    if (dropzone) dropzone.style.display = 'none';
-
-    // Train Predictive ML Model
-    trainLogisticRegressionModel();
-
-    // Initialize UI, Slicers & Charts
-    initSlicers();
-    applyFilters();
-    initPresentationNavigation();
-    initResizeObserver();
-  }
-
-  async function loadDataPipeline() {
-    // 1. Attempt Relative CSV Fetch (Works when served via http/https or VS Code Live Server)
-    try {
-      const response = await fetch('./boxify_customers.csv', { cache: 'no-cache' });
-      if (response.ok) {
-        const text = await response.text();
-        const rawRows = parseCSVText(text);
-        if (rawRows.length > 0) {
-          initializeWithRawRows(rawRows, 'loaded via direct CSV');
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('Fetch ./boxify_customers.csv blocked or unavailable (normal in file://):', err);
-    }
-
-    // 2. Fallback to window.BOXIFY_DATA from data.js
-    if (window.BOXIFY_DATA && Array.isArray(window.BOXIFY_DATA) && window.BOXIFY_DATA.length > 0) {
-      console.info('Loaded data from data.js backup.');
-      initializeWithRawRows(window.BOXIFY_DATA, 'loaded via data.js backup');
-      return;
-    }
-
-    // 3. Fallback to Drag-and-Drop / File Picker Modal
-    console.warn('Direct fetch and data.js both unavailable. Prompting manual file selection.');
-    const dropzone = document.getElementById('dropzoneOverlay');
-    if (dropzone) dropzone.style.display = 'flex';
-  }
-
-  // Setup Manual File Picker
-  function setupManualFilePicker() {
-    const fileInput = document.getElementById('manualFileInput');
-    const btnBrowse = document.getElementById('btnBrowseFile');
-    const dropzone = document.getElementById('dropzoneOverlay');
-
-    if (btnBrowse && fileInput) {
-      btnBrowse.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', (e) => {
-        if (e.target.files && e.target.files[0]) {
-          const reader = new FileReader();
-          reader.onload = function (evt) {
-            const rawRows = parseCSVText(evt.target.result);
-            initializeWithRawRows(rawRows, 'loaded via manual picker');
-          };
-          reader.readAsText(e.target.files[0]);
-        }
+      cleaned.push({
+        CustomerID: id, JoinDate: joinDate, JoinYear: joinDate.slice(0, 4), JoinQ: `${joinDate.slice(0, 4)}-Q${Math.floor((Number(joinDate.slice(5, 7)) - 1) / 3) + 1}`,
+        CancelDate: cancelDate, CancelQ: churned ? `${cancelDate.slice(0, 4)}-Q${Math.floor((Number(cancelDate.slice(5, 7)) - 1) / 3) + 1}` : '',
+        Status: churned ? 'Churned' : 'Active', Churned: churned ? 1 : 0,
+        TenureMonths: tenure, EarlyChurn: churned && tenure < 6,
+        Age: age, AgeGroup: ageGroup, Gender: String(r.Gender || 'Other').trim(),
+        Location: String(r.Location || '').trim(), SubscriptionType: String(r.SubscriptionType || 'Monthly').trim(),
+        TotalSpent: spent, BoxesReceived: boxes, EngagementScore: eng, EngBand: engBand,
+        PaymentMode: String(r.PaymentMode || 'Other').trim(),
+        MonthlyRev: safeDiv(spent, tenure)
       });
     }
 
-    if (dropzone) {
-      dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.style.background = 'rgba(15, 23, 42, 0.95)';
-      });
-      dropzone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropzone.style.background = '#0f172a';
-      });
-      dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.style.background = '#0f172a';
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          const reader = new FileReader();
-          reader.onload = function (evt) {
-            const rawRows = parseCSVText(evt.target.result);
-            initializeWithRawRows(rawRows, 'loaded via drag-and-drop');
-          };
-          reader.readAsText(e.dataTransfer.files[0]);
-        }
-      });
-    }
+    state.rawRows = rows;
+    state.cleanRows = cleaned;
+    document.getElementById('data-status-text').textContent = `Data source: ${sourceName} · ${cleaned.length.toLocaleString('en-IN')} customers · loaded via ${via}`;
+    trainLogisticModel(cleaned);
+    initFilterOptions();
+    renderAll();
+    return true;
   }
 
-  // =========================================================================
-  // 4. STATISTICAL ENGINE & AGGREGATIONS
-  // =========================================================================
-
-  function calculateKPIs(customers) {
-    const total = customers.length;
-    if (total === 0) {
-      return {
-        total: 0, active: 0, churned: 0, churnRate: 0,
-        avgCLV: 0, avgCLVActive: 0, avgCLVChurned: 0,
-        revLostAnnual: 0, avgTenure: 0, avgTenureActive: 0, avgTenureChurned: 0,
-        avgScore: 0, highEngPct: 0, earlyChurnCount: 0, earlyChurnPct: 0
-      };
-    }
-
-    let activeCount = 0;
-    let churnedCount = 0;
-    let totalSpent = 0;
-    let totalSpentActive = 0;
-    let totalSpentChurned = 0;
-    let totalTenure = 0;
-    let totalTenureActive = 0;
-    let totalTenureChurned = 0;
-    let totalScore = 0;
-    let highEngCount = 0;
-    let revLostAnnual = 0;
-    let earlyChurnCount = 0;
-
-    customers.forEach(c => {
-      totalSpent += c.totalSpent;
-      totalTenure += c.tenureMonths;
-      totalScore += c.engagementScore;
-      if (c.engagementScore >= 61) highEngCount++;
-
-      if (c.isChurned) {
-        churnedCount++;
-        totalSpentChurned += c.totalSpent;
-        totalTenureChurned += c.tenureMonths;
-        revLostAnnual += c.monthlyRate * 12;
-        if (c.isEarlyChurn) earlyChurnCount++;
-      } else {
-        activeCount++;
-        totalSpentActive += c.totalSpent;
-        totalTenureActive += c.tenureMonths;
-      }
-    });
-
-    return {
-      total: total,
-      active: activeCount,
-      churned: churnedCount,
-      churnRate: churnedCount / total,
-      avgCLV: totalSpent / total,
-      avgCLVActive: activeCount > 0 ? totalSpentActive / activeCount : 0,
-      avgCLVChurned: churnedCount > 0 ? totalSpentChurned / churnedCount : 0,
-      revLostAnnual: revLostAnnual,
-      avgTenure: totalTenure / total,
-      avgTenureActive: activeCount > 0 ? totalTenureActive / activeCount : 0,
-      avgTenureChurned: churnedCount > 0 ? totalTenureChurned / churnedCount : 0,
-      avgScore: totalScore / total,
-      highEngPct: highEngCount / total,
-      earlyChurnCount: earlyChurnCount,
-      earlyChurnPct: churnedCount > 0 ? earlyChurnCount / churnedCount : 0
-    };
-  }
-
-  function formatCurrencyINR(val) {
-    if (val >= 10000000) {
-      return `₹${(val / 10000000).toFixed(2)} Cr`;
-    }
-    if (val >= 100000) {
-      return `₹${(val / 100000).toFixed(2)} L`;
-    }
-    return `₹${Math.round(val).toLocaleString('en-IN')}`;
-  }
-
-  function formatPercent(val) {
-    return `${(val * 100).toFixed(1)}%`;
-  }
-
-  // Monthly Attrition & Cohort Calculations
-  function calculateMonthlyTimeSeries(customers) {
-    const months = [];
-    let curY = 2023, curM = 11;
-    while (curY < 2026 || (curY === 2026 && curM <= 11)) {
-      months.push(`${curY}-${curM.toString().padStart(2, '0')}`);
-      curM++;
-      if (curM > 12) {
-        curM = 1;
-        curY++;
-      }
-    }
-
-    const series = [];
-    months.forEach(mStr => {
-      const mStartDate = new Date(`${mStr}-01`);
-      let activeAtStart = 0;
-      let cancellationsInMonth = 0;
-      let joinedInMonth = 0;
-
-      customers.forEach(c => {
-        if (c.joinDate < mStartDate && (!c.cancelDate || c.cancelDate >= mStartDate)) {
-          activeAtStart++;
-        }
-        if (c.cancelDateStr && c.cancelDateStr.startsWith(mStr)) {
-          cancellationsInMonth++;
-        }
-        if (c.joinDateStr && c.joinDateStr.startsWith(mStr)) {
-          joinedInMonth++;
-        }
-      });
-
-      const churnRate = activeAtStart > 0 ? cancellationsInMonth / activeAtStart : 0;
-      series.push({
-        month: mStr,
-        joined: joinedInMonth,
-        canceled: cancellationsInMonth,
-        activeStart: activeAtStart,
-        churnRate: churnRate
-      });
-    });
-
-    return series;
-  }
-
-  function calculateCohortRetentionMatrix(customers) {
-    const cohorts = {};
-    customers.forEach(c => {
-      const q = c.joinQuarter;
-      if (!cohorts[q]) cohorts[q] = [];
-      cohorts[q].push(c);
-    });
-
-    const sortedCohorts = Object.keys(cohorts).sort();
-    const evalMonths = [1, 3, 6, 9, 12, 18, 24];
-    const matrix = [];
-
-    sortedCohorts.forEach(cohortKey => {
-      const cohortList = cohorts[cohortKey];
-      const totalInCohort = cohortList.length;
-      const row = { cohort: cohortKey, total: totalInCohort, rates: {} };
-
-      // Calculate cohort age in months relative to snapshot date
-      const [year, qtr] = cohortKey.split('-Q');
-      const cohortStartMonth = (parseInt(year, 10) - 2023) * 12 + (parseInt(qtr, 10) - 1) * 3 + 1; // Approx
-      const snapshotMonth = (2026 - 2023) * 12 + 11;
-      const cohortAgeMonths = snapshotMonth - cohortStartMonth;
-
-      evalMonths.forEach(m => {
-        if (cohortAgeMonths >= m) {
-          const retained = cohortList.filter(c => c.tenureMonths >= m).length;
-          row.rates[m] = retained / totalInCohort;
-        } else {
-          row.rates[m] = null; // Future unreached tenure
-        }
-      });
-      matrix.push(row);
-    });
-
-    return { cohorts: sortedCohorts, evalMonths: evalMonths, matrix: matrix };
-  }
-
-  function calculateSegmentBreakdown(customers, dimensionKey) {
-    const groups = {};
-    customers.forEach(c => {
-      const val = c[dimensionKey];
-      if (!groups[val]) {
-        groups[val] = { name: val, total: 0, churned: 0, spent: 0, tenure: 0, score: 0, revLost: 0 };
-      }
-      groups[val].total++;
-      groups[val].spent += c.totalSpent;
-      groups[val].tenure += c.tenureMonths;
-      groups[val].score += c.engagementScore;
-      if (c.isChurned) {
-        groups[val].churned++;
-        groups[val].revLost += c.monthlyRate * 12;
-      }
-    });
-
-    return Object.values(groups).map(g => ({
-      name: g.name,
-      total: g.total,
-      churned: g.churned,
-      active: g.total - g.churned,
-      churnRate: g.total > 0 ? g.churned / g.total : 0,
-      avgCLV: g.total > 0 ? g.spent / g.total : 0,
-      avgTenure: g.total > 0 ? g.tenure / g.total : 0,
-      avgScore: g.total > 0 ? g.score / g.total : 0,
-      revLost: g.revLost
-    })).sort((a, b) => b.churnRate - a.churnRate);
-  }
-
-  // Pearson & Point-Biserial Correlation
-  function calculateCorrelations(customers) {
-    const n = customers.length;
-    if (n < 2) return { rScoreChurn: 0, rScoreTenure: 0 };
-
-    let sumScore = 0, sumChurn = 0, sumTenure = 0;
-    customers.forEach(c => {
-      sumScore += c.engagementScore;
-      sumChurn += c.isChurned ? 1 : 0;
-      sumTenure += c.tenureMonths;
-    });
-
-    const meanScore = sumScore / n;
-    const meanChurn = sumChurn / n;
-    const meanTenure = sumTenure / n;
-
-    let numChurn = 0, denScore = 0, denChurn = 0;
-    let numTenure = 0, denTenure = 0;
-
-    customers.forEach(c => {
-      const ds = c.engagementScore - meanScore;
-      const dc = (c.isChurned ? 1 : 0) - meanChurn;
-      const dt = c.tenureMonths - meanTenure;
-
-      numChurn += ds * dc;
-      denScore += ds * ds;
-      denChurn += dc * dc;
-
-      numTenure += ds * dt;
-      denTenure += dt * dt;
-    });
-
-    const rScoreChurn = denScore * denChurn > 0 ? numChurn / Math.sqrt(denScore * denChurn) : 0;
-    const rScoreTenure = denScore * denTenure > 0 ? numTenure / Math.sqrt(denScore * denTenure) : 0;
-
-    return { rScoreChurn, rScoreTenure };
-  }
-
-  // =========================================================================
-  // 5. PURE JS LOGISTIC REGRESSION ENGINE (GRADIENT DESCENT)
-  // =========================================================================
-
-  function sigmoid(z) {
-    const clampedZ = Math.max(-500, Math.min(500, z));
-    return 1.0 / (1.0 + Math.exp(-clampedZ));
-  }
-
-  function extractFeatures(c) {
-    return [
-      1.0,                                      // Intercept
-      (c.age - 18.0) / (65.0 - 18.0),            // Normalized Age
-      c.engagementScore / 100.0,                // Normalized Engagement Score
-      c.subscriptionType === 'Monthly' ? 1.0 : 0.0,
-      c.subscriptionType === 'Quarterly' ? 1.0 : 0.0,
-      c.paymentMode === 'UPI' ? 1.0 : 0.0,
-      c.paymentMode === 'Other' ? 1.0 : 0.0,
-      c.paymentMode === 'PayPal' ? 1.0 : 0.0,
-      c.isTier2 ? 1.0 : 0.0                     // Tier-2 Location
+  // Pure JS 80/20 Logistic Regression
+  function trainLogisticModel(rows) {
+    const feat = r => [
+      1,
+      r.SubscriptionType === 'Monthly' ? 1 : 0,
+      r.SubscriptionType === 'Quarterly' ? 0.5 : 0,
+      (50 - r.EngagementScore) / 50,
+      r.TenureMonths < 6 ? 1 : 0,
+      (35 - r.Age) / 35
     ];
-  }
+    const sig = z => 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, z))));
+    const train = [], test = [];
+    rows.forEach((r, idx) => { if (idx % 5 === 0) test.push(r); else train.push(r); });
 
-  function trainLogisticRegressionModel() {
-    const dataset = state.allCustomers;
-    if (dataset.length === 0) return;
-
-    // Feature matrix X and target y
-    const X = dataset.map(extractFeatures);
-    const y = dataset.map(c => c.isChurned ? 1.0 : 0.0);
-
-    // Deterministic 80/20 train/test split (Seed pseudo-random shuffle)
-    const indices = Array.from({ length: dataset.length }, (_, i) => i);
-    let seed = 42;
-    function pseudoRandom() {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    }
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(pseudoRandom() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-
-    const splitIdx = Math.floor(0.8 * indices.length);
-    const trainIdx = indices.slice(0, splitIdx);
-    const testIdx = indices.slice(splitIdx);
-
-    const numFeatures = X[0].length;
-    const weights = new Array(numFeatures).fill(0.0);
-    const learningRate = 0.5;
-    const epochs = 500;
-    const m = trainIdx.length;
-
-    // Gradient descent
-    for (let epoch = 0; epoch < epochs; epoch++) {
-      const grads = new Array(numFeatures).fill(0.0);
-      for (let i = 0; i < m; i++) {
-        const idx = trainIdx[i];
-        const xi = X[idx];
-        const yi = y[idx];
-        let z = 0.0;
-        for (let j = 0; j < numFeatures; j++) z += weights[j] * xi[j];
-        const pred = sigmoid(z);
-        const err = pred - yi;
-        for (let j = 0; j < numFeatures; j++) grads[j] += err * xi[j];
+    let w = [0, 0, 0, 0, 0, 0];
+    const lr = 0.25;
+    for (let ep = 0; ep < 120; ep++) {
+      const grad = [0, 0, 0, 0, 0, 0];
+      for (const r of train) {
+        const x = feat(r), p = sig(w.reduce((a, wi, i) => a + wi * x[i], 0)), err = p - r.Churned;
+        for (let i = 0; i < 6; i++) grad[i] += err * x[i];
       }
-      for (let j = 0; j < numFeatures; j++) {
-        weights[j] -= learningRate * (grads[j] / m);
-      }
+      for (let i = 0; i < 6; i++) w[i] -= (lr * grad[i]) / train.length;
     }
 
-    // Evaluation on Holdout Test Set
     let tp = 0, fp = 0, tn = 0, fn = 0;
-    const posProbs = [], negProbs = [];
-    const testProbs = [];
-
-    for (let i = 0; i < testIdx.length; i++) {
-      const idx = testIdx[i];
-      const xi = X[idx];
-      const actual = y[idx];
-      let z = 0.0;
-      for (let j = 0; j < numFeatures; j++) z += weights[j] * xi[j];
-      const prob = sigmoid(z);
-      const pred = prob >= 0.5 ? 1 : 0;
-      testProbs.push({ prob, actual });
-
-      if (pred === 1 && actual === 1) tp++;
-      else if (pred === 1 && actual === 0) fp++;
-      else if (pred === 0 && actual === 0) tn++;
-      else if (pred === 0 && actual === 1) fn++;
-
-      if (actual === 1) posProbs.push(prob);
-      else negProbs.push(prob);
+    for (const r of test) {
+      const x = feat(r), pred = sig(w.reduce((a, wi, i) => a + wi * x[i], 0)) >= 0.5 ? 1 : 0;
+      if (pred === 1 && r.Churned === 1) tp++;
+      else if (pred === 1 && r.Churned === 0) fp++;
+      else if (pred === 0 && r.Churned === 0) tn++;
+      else fn++;
     }
 
-    const accuracy = (tp + tn) / testIdx.length;
-    const precision = (tp + fp) > 0 ? tp / (tp + fp) : 0;
-    const recall = (tp + fn) > 0 ? tp / (tp + fn) : 0;
-    const f1 = (precision + recall) > 0 ? 2 * precision * recall / (precision + recall) : 0;
+    state.model = {
+      weights: w,
+      scoreFn: r => {
+        const x = feat(r);
+        return sig(w.reduce((a, wi, i) => a + wi * x[i], 0));
+      },
+      testAcc: safeDiv(tp + tn, test.length) * 100,
+      testPrec: safeDiv(tp, tp + fp) * 100,
+      testRec: safeDiv(tp, tp + fn) * 100,
+      factors: [
+        { name: 'Early Stay (<6 Months)', score: Math.abs(w[4]) },
+        { name: 'Monthly Plan', score: Math.abs(w[1]) },
+        { name: 'Low Activity Score', score: Math.abs(w[3]) },
+        { name: 'Younger Age', score: Math.abs(w[5]) }
+      ].sort((a, b) => b.score - a.score)
+    };
+  }
 
-    // Mann-Whitney U for ROC AUC
-    let u = 0;
-    posProbs.forEach(pp => {
-      negProbs.forEach(np => {
-        if (pp > np) u += 1;
-        else if (pp === np) u += 0.5;
-      });
-    });
-    const auc = (posProbs.length * negProbs.length) > 0 ? u / (posProbs.length * negProbs.length) : 0.5;
-
-    // Generate ROC Curve points
-    const thresholds = Array.from({ length: 101 }, (_, i) => i / 100);
-    const rocPoints = thresholds.map(thresh => {
-      let t_tp = 0, t_fp = 0;
-      testProbs.forEach(item => {
-        const p = item.prob >= thresh ? 1 : 0;
-        if (p === 1 && item.actual === 1) t_tp++;
-        else if (p === 1 && item.actual === 0) t_fp++;
-      });
-      const tpr = posProbs.length > 0 ? t_tp / posProbs.length : 0;
-      const fpr = negProbs.length > 0 ? t_fp / negProbs.length : 0;
-      return [fpr, tpr];
-    });
-    rocPoints.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-
-    const featureNames = [
-      'Intercept', 'Age', 'Engagement Score',
-      'Monthly Plan', 'Quarterly Plan',
-      'UPI Payment', 'Other Payment', 'PayPal Payment',
-      'Tier-2 City'
-    ];
-
-    state.mlModel = {
-      weights: weights,
-      featureNames: featureNames,
-      predict: function (profile) {
-        const feat = [
-          1.0,
-          (profile.age - 18.0) / (65.0 - 18.0),
-          profile.engagementScore / 100.0,
-          profile.subscriptionType === 'Monthly' ? 1.0 : 0.0,
-          profile.subscriptionType === 'Quarterly' ? 1.0 : 0.0,
-          profile.paymentMode === 'UPI' ? 1.0 : 0.0,
-          profile.paymentMode === 'Other' ? 1.0 : 0.0,
-          profile.paymentMode === 'PayPal' ? 1.0 : 0.0,
-          profile.isTier2 ? 1.0 : 0.0
-        ];
-        let z = 0.0;
-        for (let j = 0; j < feat.length; j++) z += weights[j] * feat[j];
-        return sigmoid(z);
+  async function loadInitialData() {
+    try {
+      const resp = await fetch('./boxify_customers.csv');
+      if (resp.ok && window.Papa) {
+        const parsed = window.Papa.parse(await resp.text(), { header: true, skipEmptyLines: true });
+        if (parseAndClean(parsed.data, 'boxify_customers.csv', 'CSV fetch')) return;
       }
-    };
-
-    state.testSetMetrics = {
-      accuracy, precision, recall, f1, auc,
-      tp, fp, tn, fn, rocPoints
-    };
+    } catch (_) {}
+    if (Array.isArray(window.BOXIFY_DATA) && window.BOXIFY_DATA.length) {
+      if (parseAndClean(window.BOXIFY_DATA, 'boxify_customers.csv', 'backup (data.js)')) return;
+    }
+    document.getElementById('fallback-loader').classList.add('open');
   }
 
   // =========================================================================
-  // 6. POWER BI SLICERS & FILTERING SUBSYSTEM
+  // FILTERS & AGGREGATIONS
   // =========================================================================
-
-  function initSlicers() {
-    const subSelect = document.getElementById('slicerSubscription');
-    const locSelect = document.getElementById('slicerLocation');
-    const paySelect = document.getElementById('slicerPayment');
-    const btnReset = document.getElementById('btnResetFilters');
-
-    if (subSelect) {
-      subSelect.addEventListener('change', (e) => {
-        state.filters.subscription = e.target.value;
-        applyFilters();
-      });
-    }
-
-    if (locSelect) {
-      locSelect.addEventListener('change', (e) => {
-        state.filters.location = e.target.value;
-        applyFilters();
-      });
-    }
-
-    if (paySelect) {
-      paySelect.addEventListener('change', (e) => {
-        state.filters.payment = e.target.value;
-        applyFilters();
-      });
-    }
-
-    // Pill Filters
-    function setupPillGroup(containerId, filterKey) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
-      container.addEventListener('click', (e) => {
-        const btn = e.target.closest('.slicer-pill');
-        if (!btn) return;
-        container.querySelectorAll('.slicer-pill').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        state.filters[filterKey] = btn.getAttribute('data-val');
-        applyFilters();
-      });
-    }
-
-    setupPillGroup('pillsAgeGroup', 'ageGroup');
-    setupPillGroup('pillsGender', 'gender');
-    setupPillGroup('pillsJoinYear', 'joinYear');
-    setupPillGroup('pillsStatus', 'status');
-
-    if (btnReset) {
-      btnReset.addEventListener('click', () => {
-        resetFilters();
-      });
-    }
-  }
-
-  function resetFilters() {
-    state.filters = {
-      subscription: 'ALL',
-      location: 'ALL',
-      ageGroup: 'ALL',
-      payment: 'ALL',
-      gender: 'ALL',
-      joinYear: 'ALL',
-      status: 'ALL'
-    };
-
-    const subSelect = document.getElementById('slicerSubscription');
-    const locSelect = document.getElementById('slicerLocation');
-    const paySelect = document.getElementById('slicerPayment');
-    if (subSelect) subSelect.value = 'ALL';
-    if (locSelect) locSelect.value = 'ALL';
-    if (paySelect) paySelect.value = 'ALL';
-
-    ['pillsAgeGroup', 'pillsGender', 'pillsJoinYear', 'pillsStatus'].forEach(id => {
-      const container = document.getElementById(id);
-      if (container) {
-        container.querySelectorAll('.slicer-pill').forEach(p => {
-          if (p.getAttribute('data-val') === 'ALL') p.classList.add('active');
-          else p.classList.remove('active');
-        });
-      }
-    });
-
-    applyFilters();
-  }
-
-  function applyFilters() {
+  function getFiltered() {
     const f = state.filters;
-    let activeFilterCount = 0;
-    if (f.subscription !== 'ALL') activeFilterCount++;
-    if (f.location !== 'ALL') activeFilterCount++;
-    if (f.ageGroup !== 'ALL') activeFilterCount++;
-    if (f.payment !== 'ALL') activeFilterCount++;
-    if (f.gender !== 'ALL') activeFilterCount++;
-    if (f.joinYear !== 'ALL') activeFilterCount++;
-    if (f.status !== 'ALL') activeFilterCount++;
-
-    const badge = document.getElementById('filterCountBadge');
-    if (badge) badge.textContent = `${activeFilterCount} active`;
-
-    const filtered = state.allCustomers.filter(c => {
-      if (f.subscription !== 'ALL' && c.subscriptionType !== f.subscription) return false;
-      if (f.location !== 'ALL' && c.location !== f.location) return false;
-      if (f.ageGroup !== 'ALL' && c.ageGroup !== f.ageGroup) return false;
-      if (f.payment !== 'ALL' && c.paymentMode !== f.payment) return false;
-      if (f.gender !== 'ALL' && c.gender !== f.gender) return false;
-      if (f.joinYear !== 'ALL' && c.joinYear !== f.joinYear) return false;
-      if (f.status !== 'ALL') {
-        if (f.status === 'Active' && c.isChurned) return false;
-        if (f.status === 'Churned' && !c.isChurned) return false;
-      }
+    return state.cleanRows.filter(r => {
+      if (f.status.size && !f.status.has(r.Status)) return false;
+      if (f.plans.size && !f.plans.has(r.SubscriptionType)) return false;
+      if (f.engBands.size && !f.engBands.has(r.EngBand)) return false;
+      if (f.ageGroups.size && !f.ageGroups.has(r.AgeGroup)) return false;
+      if (f.location && r.Location !== f.location) return false;
+      if (f.payModes.size && !f.payModes.has(r.PaymentMode)) return false;
+      if (f.genders.size && !f.genders.has(r.Gender)) return false;
+      if (f.joinYears.size && !f.joinYears.has(r.JoinYear)) return false;
       return true;
     });
-
-    state.filteredCustomers = filtered;
-
-    const summary = document.getElementById('activeFilterSummary');
-    if (summary) {
-      if (activeFilterCount === 0) {
-        summary.textContent = `All ${filtered.length.toLocaleString()} customers active across all dimensions.`;
-      } else {
-        summary.textContent = `Filtered to ${filtered.length.toLocaleString()} customers (${formatPercent(filtered.length / state.allCustomers.length)} of base).`;
-      }
-    }
-
-    renderCurrentSlide();
   }
 
-  // Cross-Filter Trigger (Invoked when user clicks any chart segment)
-  function triggerCrossFilter(dimensionKey, value) {
-    if (dimensionKey === 'subscription') {
-      state.filters.subscription = state.filters.subscription === value ? 'ALL' : value;
-      const select = document.getElementById('slicerSubscription');
-      if (select) select.value = state.filters.subscription;
-    } else if (dimensionKey === 'location') {
-      state.filters.location = state.filters.location === value ? 'ALL' : value;
-      const select = document.getElementById('slicerLocation');
-      if (select) select.value = state.filters.location;
-    } else if (dimensionKey === 'payment') {
-      state.filters.payment = state.filters.payment === value ? 'ALL' : value;
-      const select = document.getElementById('slicerPayment');
-      if (select) select.value = state.filters.payment;
-    } else if (dimensionKey === 'ageGroup') {
-      state.filters.ageGroup = state.filters.ageGroup === value ? 'ALL' : value;
-      const container = document.getElementById('pillsAgeGroup');
-      if (container) {
-        container.querySelectorAll('.slicer-pill').forEach(p => {
-          if (p.getAttribute('data-val') === state.filters.ageGroup) p.classList.add('active');
-          else p.classList.remove('active');
-        });
-      }
+  function summarize(rows) {
+    let churned = 0, active = 0, spentSum = 0, tenureSum = 0, engSum = 0, lostAnnual = 0, earlyChurned = 0;
+    let actSpent = 0, chSpent = 0, actTen = 0, chTen = 0;
+    for (const r of rows) {
+      spentSum += r.TotalSpent; tenureSum += r.TenureMonths; engSum += r.EngagementScore;
+      if (r.Churned) { churned++; chSpent += r.TotalSpent; chTen += r.TenureMonths; lostAnnual += r.MonthlyRev * 12; if (r.EarlyChurn) earlyChurned++; }
+      else { active++; actSpent += r.TotalSpent; actTen += r.TenureMonths; }
     }
-    applyFilters();
+    const n = rows.length;
+    return {
+      n, churned, active,
+      churnRate: safeDiv(churned, n) * 100,
+      avgCLV: safeDiv(spentSum, n),
+      avgTenure: safeDiv(tenureSum, n),
+      avgEng: safeDiv(engSum, n),
+      lostAnnual, earlyChurned,
+      actCLV: safeDiv(actSpent, active), chCLV: safeDiv(chSpent, churned),
+      actTen: safeDiv(actTen, active), chTen: safeDiv(chTen, churned)
+    };
+  }
+
+  function groupBy(rows, fn) {
+    const m = new Map();
+    for (const r of rows) {
+      const k = fn(r);
+      let g = m.get(k);
+      if (!g) { g = { key: k, n: 0, churned: 0, spent: 0, tenure: 0 }; m.set(k, g); }
+      g.n++; g.churned += r.Churned; g.spent += r.TotalSpent; g.tenure += r.TenureMonths;
+    }
+    for (const g of m.values()) {
+      g.churnRate = safeDiv(g.churned, g.n) * 100;
+      g.avgCLV = safeDiv(g.spent, g.n);
+      g.avgTenure = safeDiv(g.tenure, g.n);
+    }
+    return m;
   }
 
   // =========================================================================
-  // 7. PRESENTATION NAVIGATION & UI CONTROLS
+  // TOOLTIPS, STORY PANEL & ECHARTS ENGINE
   // =========================================================================
-
-  function goToSlide(index) {
-    if (index < 0 || index >= state.totalSlides) return;
-    
-    // Hide all slides
-    const slides = document.querySelectorAll('.slide');
-    slides.forEach((s, idx) => {
-      s.classList.remove('active');
-    });
-
-    state.currentSlide = index;
-    const currentSlideEl = document.getElementById(`slide-${index}`);
-    if (currentSlideEl) {
-      currentSlideEl.classList.add('active');
-    }
-
-    // Update Counter & Jump Select
-    const badge = document.getElementById('slideCounterBadge');
-    if (badge) badge.textContent = `Slide ${index + 1} of ${state.totalSlides}`;
-    const jumpSelect = document.getElementById('slideJumpSelect');
-    if (jumpSelect) jumpSelect.value = index.toString();
-
-    // Update Progress Bar
-    const prog = document.getElementById('topProgressBar');
-    if (prog) {
-      prog.style.width = `${((index + 1) / state.totalSlides) * 100}%`;
-    }
-
-    // Nav Button States
-    const btnPrev = document.getElementById('btnPrevSlide');
-    const btnNext = document.getElementById('btnNextSlide');
-    if (btnPrev) btnPrev.disabled = index === 0;
-    if (btnNext) btnNext.disabled = index === state.totalSlides - 1;
-
-    // Update URL hash
-    try {
-      history.replaceState(null, '', '#slide-' + index);
-    } catch (e) {}
-
-    // Render / Resize charts on current slide
-    renderCurrentSlide();
+  function ttCard(title, plainSentence, rows) {
+    return `<div style="max-width:270px; font-family:Inter,sans-serif; font-size:12px; line-height:1.4;">
+      <div class="tt-title">${title}</div>
+      <div style="color:var(--text-muted); margin-bottom:5px; font-size:11.5px;">${plainSentence}</div>
+      ${rows.map(r => `<div class="tt-row"><span class="tt-lbl">${r.color ? `<span class="tt-dot" style="background:${r.color}"></span>` : ''}${r.label}</span><span class="tt-val">${r.value}</span></div>`).join('')}
+    </div>`;
   }
 
-  function initPresentationNavigation() {
-    const btnPrev = document.getElementById('btnPrevSlide');
-    const btnNext = document.getElementById('btnNextSlide');
-    const jumpSelect = document.getElementById('slideJumpSelect');
-
-    if (btnPrev) btnPrev.addEventListener('click', () => goToSlide(state.currentSlide - 1));
-    if (btnNext) btnNext.addEventListener('click', () => goToSlide(state.currentSlide + 1));
-    if (jumpSelect) jumpSelect.addEventListener('change', (e) => goToSlide(parseInt(e.target.value, 10)));
-
-    // Keyboard Shortcuts
-    window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-        e.preventDefault();
-        goToSlide(state.currentSlide + 1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        e.preventDefault();
-        goToSlide(state.currentSlide - 1);
-      } else if (e.key === 'f' || e.key === 'F') {
-        e.preventDefault();
-        toggleFullscreen();
-      }
-    });
-
-    // Mobile Swipe Handling
-    let touchStartX = 0;
-    const stage = document.querySelector('.slide-stage');
-    if (stage) {
-      stage.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
-      stage.addEventListener('touchend', e => {
-        const touchEndX = e.changedTouches[0].screenX;
-        const diff = touchEndX - touchStartX;
-        if (diff < -50) goToSlide(state.currentSlide + 1);
-        else if (diff > 50) goToSlide(state.currentSlide - 1);
-      }, { passive: true });
-    }
-
-    // Mobile / Narrow Screen Initial Sidebar State
-    if (window.innerWidth < 960) {
-      state.isSlicerOpen = false;
-      const sidebarEl = document.getElementById('slicerSidebar');
-      const btnToggle = document.getElementById('btnToggleSlicers');
-      if (sidebarEl) sidebarEl.classList.add('collapsed');
-      if (btnToggle) btnToggle.classList.remove('active');
-    }
-
-    // Slicer Toggle Button
-    const btnToggleSlicers = document.getElementById('btnToggleSlicers');
-    const slicerSidebar = document.getElementById('slicerSidebar');
-    if (btnToggleSlicers && slicerSidebar) {
-      btnToggleSlicers.addEventListener('click', () => {
-        state.isSlicerOpen = !state.isSlicerOpen;
-        if (state.isSlicerOpen) {
-          slicerSidebar.classList.remove('collapsed');
-          btnToggleSlicers.classList.add('active');
-        } else {
-          slicerSidebar.classList.add('collapsed');
-          btnToggleSlicers.classList.remove('active');
-        }
-        setTimeout(resizeAllCharts, 250);
-      });
-    }
-
-    // Presenter Mode Toggle (Hides sidebar and optimizes stage)
-    const btnPresenter = document.getElementById('btnPresenterMode');
-    if (btnPresenter && slicerSidebar && btnToggleSlicers) {
-      btnPresenter.addEventListener('click', () => {
-        state.isPresenterMode = !state.isPresenterMode;
-        if (state.isPresenterMode) {
-          slicerSidebar.classList.add('collapsed');
-          btnToggleSlicers.classList.remove('active');
-          btnPresenter.classList.add('active');
-        } else {
-          slicerSidebar.classList.remove('collapsed');
-          btnToggleSlicers.classList.add('active');
-          btnPresenter.classList.remove('active');
-        }
-        setTimeout(resizeAllCharts, 250);
-      });
-    }
-
-    // Fullscreen Toggle
-    const btnFs = document.getElementById('btnFullscreen');
-    if (btnFs) btnFs.addEventListener('click', toggleFullscreen);
-
-    // Print to PDF
-    const btnPrint = document.getElementById('btnPrintDeck');
-    if (btnPrint) {
-      btnPrint.addEventListener('click', () => {
-        window.print();
-      });
-    }
-
-    // Data & Methods Modal
-    const btnModal = document.getElementById('btnDataMethodsModal');
-    const modal = document.getElementById('dataMethodsModal');
-    const btnCloseModal = document.getElementById('btnCloseModal');
-    if (btnModal && modal) {
-      btnModal.addEventListener('click', () => modal.classList.add('open'));
-    }
-    if (btnCloseModal && modal) {
-      btnCloseModal.addEventListener('click', () => modal.classList.remove('open'));
-    }
-    if (modal) {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.classList.remove('open');
-      });
-    }
-
-    // Simulator Sliders Binding
-    setupSimulatorControls();
-
-    // Risk Scorer Widget Binding
-    setupRiskScorerControls();
-
-    // Chart / Table Toggles Binding
-    initCardToggles();
-
-    // Initial slide render check from hash or query
-    let startSlide = 0;
-    try {
-      const hashMatch = window.location.hash.match(/slide-(\d+)/);
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.has('slide')) {
-        startSlide = parseInt(urlParams.get('slide'), 10);
-      } else if (hashMatch) {
-        startSlide = parseInt(hashMatch[1], 10);
-      }
-    } catch (e) {}
-    if (isNaN(startSlide) || startSlide < 0 || startSlide >= state.totalSlides) {
-      startSlide = 0;
-    }
-    goToSlide(startSlide);
-  }
-
-  function initCardToggles() {
-    document.querySelectorAll('.btn-card-toggle[data-target]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetId = btn.getAttribute('data-target');
-        const chartEl = document.getElementById(targetId);
-        if (!chartEl) return;
-
-        let tableEl = chartEl.parentNode.querySelector('.chart-table-alt');
-        if (!tableEl) {
-          tableEl = document.createElement('div');
-          tableEl.className = 'table-responsive chart-table-alt';
-          tableEl.style.display = 'none';
-          chartEl.parentNode.insertBefore(tableEl, chartEl.nextSibling);
-        }
-
-        if (tableEl.style.display === 'none') {
-          chartEl.style.display = 'none';
-          tableEl.style.display = 'block';
-          btn.textContent = 'Show Chart';
-          generateTableForChart(targetId, tableEl);
-        } else {
-          tableEl.style.display = 'none';
-          chartEl.style.display = 'block';
-          btn.textContent = 'Toggle View';
-          if (state.charts[targetId]) state.charts[targetId].resize();
-        }
-      });
-    });
-  }
-
-  function generateTableForChart(targetId, containerEl) {
-    if (targetId === 'chart_monthly_churn' || targetId === 'chart_inflow_outflow') {
-      const series = calculateMonthlyTimeSeries(state.filteredCustomers);
-      let html = '<table class="bi-table"><thead><tr><th>Month</th><th class="number">Joined</th><th class="number">Canceled</th><th class="number">Active Start</th><th class="number">Churn Rate</th></tr></thead><tbody>';
-      series.slice(-12).forEach(s => {
-        html += `<tr><td>${s.month}</td><td class="number">${s.joined}</td><td class="number">${s.canceled}</td><td class="number">${s.activeStart}</td><td class="number">${(s.churnRate * 100).toFixed(2)}%</td></tr>`;
-      });
-      html += '</tbody></table>';
-      containerEl.innerHTML = html;
-    } else if (targetId === 'chart_cohort_heatmap') {
-      const cohortData = calculateCohortRetentionMatrix(state.filteredCustomers);
-      let html = '<table class="bi-table"><thead><tr><th>Cohort</th><th class="number">Total</th>' + cohortData.evalMonths.map(m => `<th class="number">M${m}</th>`).join('') + '</tr></thead><tbody>';
-      cohortData.matrix.forEach(r => {
-        html += `<tr><td><strong>${r.cohort}</strong></td><td class="number">${r.total}</td>` +
-          cohortData.evalMonths.map(m => `<td class="number">${r.rates[m] !== null ? (r.rates[m] * 100).toFixed(1) + '%' : '-'}</td>`).join('') +
-          '</tr>';
-      });
-      html += '</tbody></table>';
-      containerEl.innerHTML = html;
-    }
-  }
-
-  function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => console.log(err));
-    } else {
-      document.exitFullscreen().catch(err => console.log(err));
-    }
-  }
-
-  function initResizeObserver() {
-    const observer = new ResizeObserver(() => {
-      resizeAllCharts();
-    });
-    const wrapper = document.querySelector('.slide-content-wrapper');
-    if (wrapper) observer.observe(wrapper);
-    window.addEventListener('resize', () => {
-      resizeAllCharts();
-    });
-  }
-
-  function resizeAllCharts() {
-    Object.values(state.charts).forEach(chartInstance => {
-      if (chartInstance && typeof chartInstance.resize === 'function') {
-        chartInstance.resize();
-      }
-    });
-  }
-
-  // Animated Count-Up for Headline KPI Cards
-  function animateValue(elementId, start, end, duration, formatter) {
-    const el = document.getElementById(elementId);
+  function renderStory(id, { keyLabel, keyValue, keySub, simpleWords, bullets, why, actionLabel, actionText }) {
+    const el = document.getElementById(id);
     if (!el) return;
-    el.textContent = formatter(end);
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      return;
+    el.innerHTML = `
+      <div class="story-key-card"><span class="story-key-label">${keyLabel}</span><span class="story-key-value">${keyValue}</span><span class="story-key-sub">${keySub}</span></div>
+      <div class="simple-words-box"><strong>💡 In simple words:</strong> ${simpleWords}</div>
+      <div><span class="story-section-hdr">What the data shows</span><ul class="story-bullets">${bullets.map(b => `<li>${b}</li>`).join('')}</ul></div>
+      <div><span class="story-section-hdr">Why it matters</span><div class="story-why">${why}</div></div>
+      <div class="story-action-box"><span class="action-chip">${actionLabel}</span><span class="story-action-text">${actionText}</span></div>`;
+  }
+
+  const tipEl = document.getElementById('bx-floating-tooltip');
+  function showTip(target, title, sentence, rows) {
+    tipEl.innerHTML = ttCard(title, sentence, rows);
+    tipEl.classList.add('visible');
+    const r = target.getBoundingClientRect(), tw = tipEl.offsetWidth || 260, th = tipEl.offsetHeight || 90;
+    tipEl.style.left = `${Math.max(12, Math.min(window.innerWidth - tw - 12, r.left + r.width / 2 - tw / 2))}px`;
+    tipEl.style.top = `${(r.bottom + 8 + th > window.innerHeight - 12) ? r.top - th - 8 : r.bottom + 8}px`;
+  }
+  const hideTip = () => tipEl.classList.remove('visible');
+
+  function bindTooltips() {
+    document.querySelectorAll('[data-info]').forEach(el => {
+      el.onmouseenter = () => showTip(el, 'How to Read This Chart', el.dataset.info, []);
+      el.onmouseleave = hideTip;
+    });
+    document.querySelectorAll('[data-kpi-tip]').forEach(el => {
+      el.onmouseenter = () => { try { const d = JSON.parse(el.dataset.kpiTip); showTip(el, d.title, d.sentence, d.rows); } catch (_) {} };
+      el.onmouseleave = hideTip;
+    });
+  }
+
+  function getTC() {
+    const d = state.theme === 'dark';
+    return { text: d ? '#CBD5E1' : '#475569', title: d ? '#F8FAFC' : '#0F172A', grid: d ? '#1E293B' : '#E2E8F0', bg: d ? '#111A2E' : '#FFFFFF', border: d ? '#334155' : '#CBD5E1' };
+  }
+
+  function renderChart(id, builder, hasData = true, onClick = null) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const oldE = el.querySelector('.chart-empty-state'); if (oldE) oldE.remove();
+    if (!hasData || !window.echarts) {
+      const inst = window.echarts ? window.echarts.getInstanceByDom(el) : null; if (inst) inst.clear();
+      const e = document.createElement('div'); e.className = 'chart-empty-state'; e.innerHTML = '<strong>No matching customers</strong><span>Reset filters to see charts.</span>'; el.appendChild(e); return;
     }
-    setTimeout(() => {
-      const range = end - start;
-      let current = start;
-      const increment = range / (duration / 16);
-      const step = () => {
-        current += increment;
-        if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
-          el.textContent = formatter(end);
-        } else {
-          el.textContent = formatter(current);
-          requestAnimationFrame(step);
+    try {
+      let c = window.echarts.getInstanceByDom(el);
+      if (!c) {
+        c = window.echarts.init(el);
+        if (!state.resizeObservers.has(id)) {
+          let raf;
+          const ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const i = window.echarts.getInstanceByDom(el); if (i && el.offsetWidth > 0 && el.offsetHeight > 0) i.resize(); }); });
+          ro.observe(el); state.resizeObservers.set(id, ro);
         }
-      };
-      requestAnimationFrame(step);
-    }, 100);
+      }
+      const tc = getTC(), opt = builder(tc);
+      opt.animationDuration = 300;
+      if (opt.tooltip) {
+        opt.tooltip.confine = true; opt.tooltip.backgroundColor = tc.bg; opt.tooltip.borderColor = tc.border; opt.tooltip.borderWidth = 1;
+        opt.tooltip.textStyle = { color: tc.title, fontFamily: 'Inter,sans-serif', fontSize: 12 };
+        opt.tooltip.extraCssText = 'border-radius:12px; box-shadow:0 10px 26px rgba(15,23,42,0.18); padding:10px 12px;';
+      }
+      c.setOption(opt, true);
+      c.off('click');
+      if (onClick) c.on('click', onClick);
+    } catch (err) {
+      el.innerHTML = `<div class="chart-empty-state"><strong>Chart Error</strong><span>${err.message}</span></div>`;
+    }
+  }
+
+  function resizeActive() {
+    const act = document.querySelector('.slide.active');
+    if (!act || !window.echarts) return;
+    act.querySelectorAll('.chart-container').forEach(el => {
+      const i = window.echarts.getInstanceByDom(el);
+      if (i && el.offsetWidth > 0 && el.offsetHeight > 0) i.resize();
+    });
   }
 
   // =========================================================================
-  // 8. SLIDE RENDERING CONTROLLER (SLIDES 1 TO 12)
+  // FILTER UI
   // =========================================================================
+  const toggleSet = (s, v) => { if (s.has(v)) s.delete(v); else s.add(v); renderAll(); };
 
-  function renderCurrentSlide() {
-    const kpis = calculateKPIs(state.filteredCustomers);
-
-    switch (state.currentSlide) {
-      case 0:
-        renderSlide1(kpis);
-        break;
-      case 1:
-        // Static documentation slide
-        break;
-      case 2:
-        renderSlide3();
-        break;
-      case 3:
-        renderSlide4(kpis);
-        break;
-      case 4:
-        renderSlide5();
-        break;
-      case 5:
-        renderSlide6();
-        break;
-      case 6:
-        renderSlide7(kpis);
-        break;
-      case 7:
-        renderSlide8();
-        break;
-      case 8:
-        renderSlide9(kpis);
-        break;
-      case 9:
-        // Recommendations slide
-        break;
-      case 10:
-        // Appendix A1 methodology
-        break;
-      case 11:
-        renderSlide12();
-        break;
-    }
+  function initFilterOptions() {
+    const locs = [...new Set(state.cleanRows.map(r => r.Location))].sort();
+    document.getElementById('filter-location-select').innerHTML = `<option value="">All ${locs.length} Cities</option>` + locs.map(l => `<option value="${l}">${l}</option>`).join('');
+    renderChips();
   }
 
-  // -------------------------------------------------------------------------
-  // SLIDE 1: Title & Executive Summary
-  // -------------------------------------------------------------------------
-  function renderSlide1(kpis) {
-    animateValue('s1_kpi_total', 0, kpis.total, 800, v => Math.round(v).toLocaleString());
-    animateValue('s1_kpi_rate', 0, kpis.churnRate, 800, v => formatPercent(v));
-    animateValue('s1_kpi_revlost', 0, kpis.revLostAnnual, 800, v => formatCurrencyINR(v));
-    animateValue('s1_kpi_clvgap', 0, kpis.avgCLVActive - kpis.avgCLVChurned, 800, v => formatCurrencyINR(v));
-
-    const actEl = document.getElementById('s1_sub_active');
-    const chuEl = document.getElementById('s1_sub_churned');
-    const actClvEl = document.getElementById('s1_sub_clv_act');
-    const chuClvEl = document.getElementById('s1_sub_clv_chu');
-
-    if (actEl) actEl.textContent = kpis.active.toLocaleString();
-    if (chuEl) chuEl.textContent = kpis.churned.toLocaleString();
-    if (actClvEl) actClvEl.textContent = formatCurrencyINR(kpis.avgCLVActive);
-    if (chuClvEl) chuClvEl.textContent = formatCurrencyINR(kpis.avgCLVChurned);
-  }
-
-  // -------------------------------------------------------------------------
-  // SLIDE 3: Data Overview & Profiling Visual
-  // -------------------------------------------------------------------------
-  function renderSlide3() {
-    const dom = document.getElementById('chart_data_profile');
-    if (!dom || !window.echarts) return;
-
-    if (!state.charts.dataProfile) {
-      state.charts.dataProfile = echarts.init(dom);
-    }
-
-    // Calculate Age distribution buckets
-    const ageBuckets = { '18-24': 0, '25-34': 0, '35-44': 0, '45-54': 0, '55+': 0 };
-    state.filteredCustomers.forEach(c => { ageBuckets[c.ageGroup]++; });
-
-    const option = {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      grid: { top: 25, right: 20, bottom: 25, left: 45 },
-      xAxis: {
-        type: 'category',
-        data: Object.keys(ageBuckets),
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#475569', fontSize: 11 }
-      },
-      yAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      series: [{
-        name: 'Subscribers',
-        type: 'bar',
-        data: Object.values(ageBuckets),
-        barWidth: '45%',
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#6366f1' },
-            { offset: 1, color: '#818cf8' }
-          ]),
-          borderRadius: [4, 4, 0, 0]
-        }
-      }]
+  function renderChips() {
+    const rows = state.cleanRows;
+    const mk = (id, vals, setObj, fn) => {
+      const cnt = new Map(); rows.forEach(r => { const k = fn(r); cnt.set(k, (cnt.get(k) || 0) + 1); });
+      const w = document.getElementById(id);
+      w.innerHTML = vals.map(v => `<button class="slicer-chip ${setObj.has(v) ? 'active' : ''}" data-v="${v}" title="${v}: ${cnt.get(v)||0} customers — Click to focus">${v} <span class="chip-count">${cnt.get(v)||0}</span></button>`).join('');
+      w.querySelectorAll('.slicer-chip').forEach(b => b.onclick = () => toggleSet(setObj, b.dataset.v));
     };
-
-    state.charts.dataProfile.setOption(option);
+    mk('filter-status-chips', ['Active', 'Churned'], state.filters.status, r => r.Status);
+    mk('filter-plan-chips', PLAN_ORDER, state.filters.plans, r => r.SubscriptionType);
+    mk('filter-eng-chips', ENG_ORDER, state.filters.engBands, r => r.EngBand);
+    mk('filter-age-chips', AGE_ORDER, state.filters.ageGroups, r => r.AgeGroup);
+    mk('filter-pay-chips', ['UPI', 'Card', 'Other', 'PayPal'], state.filters.payModes, r => r.PaymentMode);
+    mk('filter-gender-chips', ['Female', 'Male', 'Other'], state.filters.genders, r => r.Gender);
+    mk('filter-year-chips', ['2023', '2024', '2025', '2026'], state.filters.joinYears, r => r.JoinYear);
   }
 
-  // -------------------------------------------------------------------------
-  // SLIDE 4: KPI Dashboard Command Center
-  // -------------------------------------------------------------------------
-  function renderSlide4(kpis) {
-    const s4Total = document.getElementById('s4_kpi_total');
-    const s4Active = document.getElementById('s4_kpi_active');
-    const s4Churned = document.getElementById('s4_kpi_churned');
-    const s4Rate = document.getElementById('s4_kpi_rate');
-    const s4Clv = document.getElementById('s4_kpi_clv');
-    const s4RevLost = document.getElementById('s4_kpi_revlost');
-    const s4Tenure = document.getElementById('s4_kpi_tenure');
-    const s4Eng = document.getElementById('s4_kpi_eng');
-
-    if (s4Total) s4Total.textContent = kpis.total.toLocaleString();
-    if (s4Active) s4Active.textContent = kpis.active.toLocaleString();
-    if (s4Churned) s4Churned.textContent = kpis.churned.toLocaleString();
-    if (s4Rate) s4Rate.textContent = formatPercent(kpis.churnRate);
-    if (s4Clv) s4Clv.textContent = formatCurrencyINR(kpis.avgCLV);
-    if (s4RevLost) s4RevLost.textContent = formatCurrencyINR(kpis.revLostAnnual);
-    if (s4Tenure) s4Tenure.textContent = `${kpis.avgTenure.toFixed(1)}m`;
-    if (s4Eng) s4Eng.textContent = kpis.avgScore.toFixed(1);
-
-    const subActPct = document.getElementById('s4_sub_active_pct');
-    const subChuPct = document.getElementById('s4_sub_churned_pct');
-    const subClvDiff = document.getElementById('s4_sub_clv_diff');
-    const subTenDiff = document.getElementById('s4_sub_tenure_diff');
-    const subEngHigh = document.getElementById('s4_sub_eng_high');
-
-    if (subActPct) subActPct.textContent = `${formatPercent(kpis.total > 0 ? kpis.active / kpis.total : 0)} active`;
-    if (subChuPct) subChuPct.textContent = `${formatPercent(kpis.total > 0 ? kpis.churned / kpis.total : 0)} churned`;
-    if (subClvDiff) subClvDiff.textContent = `Act: ${formatCurrencyINR(kpis.avgCLVActive)} · Chu: ${formatCurrencyINR(kpis.avgCLVChurned)}`;
-    if (subTenDiff) subTenDiff.textContent = `Act: ${kpis.avgTenureActive.toFixed(1)}m · Chu: ${kpis.avgTenureChurned.toFixed(1)}m`;
-    if (subEngHigh) subEngHigh.textContent = `${formatPercent(kpis.highEngPct)} high engagement`;
-
-    // Monthly Churn Rate Line Chart
-    renderMonthlyChurnChart();
-
-    // New vs Churned Customer Inflow/Outflow
-    renderInflowOutflowChart();
-
-    // Cohort Retention Heatmap
-    renderCohortHeatmap();
-
-    // Dynamic Insights update
-    const monthlySeries = calculateMonthlyTimeSeries(state.filteredCustomers);
-    const nonZeroRates = monthlySeries.filter(s => s.activeStart > 0).map(s => s.churnRate);
-    const avgMonthlyRate = nonZeroRates.length > 0 ? (nonZeroRates.reduce((a, b) => a + b, 0) / nonZeroRates.length * 100).toFixed(1) : '4.1';
-    const insightMonthly = document.getElementById('insight_monthly_churn');
-    if (insightMonthly) {
-      insightMonthly.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>Monthly churn rate stabilizes at <strong>${avgMonthlyRate}%</strong>, with monthly attrition averaging ~4.1% across active cohorts.</span>`;
-    }
-
-    const totalJoined = monthlySeries.reduce((a, b) => a + b.joined, 0);
-    const totalCanceled = monthlySeries.reduce((a, b) => a + b.canceled, 0);
-    const insightInflow = document.getElementById('insight_inflow_outflow');
-    if (insightInflow) {
-      insightInflow.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>Total cohort inflow of <strong>${totalJoined.toLocaleString()}</strong> signups vs <strong>${totalCanceled.toLocaleString()}</strong> cancellations over 36 operating months.</span>`;
-    }
+  function renderPills(n) {
+    document.getElementById('slicer-row-counter').textContent = `${fmtNum(n)} of ${fmtNum(state.cleanRows.length)} customers`;
+    const f = state.filters, p = [];
+    f.status.forEach(v => p.push({ l: v, c: () => f.status.delete(v) }));
+    f.plans.forEach(v => p.push({ l: v, c: () => f.plans.delete(v) }));
+    f.engBands.forEach(v => p.push({ l: v, c: () => f.engBands.delete(v) }));
+    f.ageGroups.forEach(v => p.push({ l: v, c: () => f.ageGroups.delete(v) }));
+    if (f.location) p.push({ l: f.location, c: () => { f.location = ''; document.getElementById('filter-location-select').value = ''; } });
+    f.payModes.forEach(v => p.push({ l: v, c: () => f.payModes.delete(v) }));
+    f.genders.forEach(v => p.push({ l: v, c: () => f.genders.delete(v) }));
+    f.joinYears.forEach(v => p.push({ l: v, c: () => f.joinYears.delete(v) }));
+    const w = document.getElementById('active-filter-pills');
+    w.innerHTML = p.map((x, i) => `<span class="filter-pill" data-i="${i}">${x.l} ✕</span>`).join('');
+    w.querySelectorAll('.filter-pill').forEach(el => el.onclick = () => { p[Number(el.dataset.i)].c(); renderAll(); });
   }
 
-  function renderMonthlyChurnChart() {
-    const dom = document.getElementById('chart_monthly_churn');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.monthlyChurn) state.charts.monthlyChurn = echarts.init(dom);
+  // =========================================================================
+  // RENDER ALL 12 SLIDES
+  // =========================================================================
+  function renderAll() {
+    renderChips();
+    const rows = getFiltered();
+    renderPills(rows.length);
+    const s = summarize(rows), base = summarize(state.cleanRows);
 
-    const timeSeries = calculateMonthlyTimeSeries(state.filteredCustomers);
-    const months = timeSeries.map(t => t.month);
-    const rates = timeSeries.map(t => (t.churnRate * 100).toFixed(2));
+    renderSlide2(rows, s, base);
+    renderSlide3(rows);
+    renderSlide4(rows, s);
+    renderSlide5(rows, s);
+    renderSlide6(rows, s);
+    renderSlide7(rows, s);
+    renderSlide8(rows, s);
+    renderSlide9(rows, s);
 
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        formatter: params => {
-          const pt = params[0];
-          return `<strong>${pt.name}</strong><br/>Monthly Churn Rate: <strong>${pt.value}%</strong>`;
-        }
-      },
-      grid: { top: 20, right: 15, bottom: 25, left: 35 },
-      xAxis: {
-        type: 'category',
-        data: months,
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: {
-          color: '#64748b', fontSize: 9,
-          interval: 5,
-          formatter: v => v.substring(2)
-        }
-      },
-      yAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 10, formatter: '{value}%' },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      series: [{
-        name: 'Monthly Churn Rate',
-        type: 'line',
-        data: rates,
-        smooth: true,
-        showSymbol: false,
-        lineStyle: { color: '#ef4444', width: 2.5 },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(239, 68, 68, 0.25)' },
-            { offset: 1, color: 'rgba(239, 68, 68, 0.01)' }
-          ])
-        },
-        markLine: {
-          data: [{ type: 'average', name: 'Avg Churn Rate' }],
-          lineStyle: { type: 'dashed', color: '#94a3b8' },
-          label: { position: 'end', formatter: 'Avg: {c}%', fontSize: 9 }
-        }
-      }]
-    };
-
-    state.charts.monthlyChurn.setOption(option);
+    bindTooltips();
+    updateDiagnostics();
   }
 
-  function renderInflowOutflowChart() {
-    const dom = document.getElementById('chart_inflow_outflow');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.inflowOutflow) state.charts.inflowOutflow = echarts.init(dom);
+  function renderSlide2(rows, s, base) {
+    document.querySelector('[data-term="churnGaugeTitle"]').textContent = tLbl('Customers Who Left (%)', 'Churn Rate (%)');
+    const cards = [
+      { cls: '', l: 'Customers', v: fmtNum(s.n), b: 'Total', s: 'In current view', tip: { title: 'Total Customers', sentence: 'Number of subscribers matching your active filters.', rows: [{ label: 'Filtered', value: fmtNum(s.n) }, { label: 'All Records', value: fmtNum(base.n) }] } },
+      { cls: 'kpi-green', l: 'Active Stayers', v: fmtNum(s.active), b: fmtPct(100 - s.churnRate), s: 'Blank cancel date', tip: { title: 'Active Customers', sentence: 'Subscribers still receiving boxes on 2026-11-21.', rows: [{ label: 'Count', value: fmtNum(s.active) }] } },
+      { cls: 'kpi-red', l: 'Cancelled', v: fmtNum(s.churned), b: `${s.earlyChurned} <6m`, s: 'Left Boxify', tip: { title: 'Cancelled Subscribers', sentence: 'Customers with a recorded cancellation date.', rows: [{ label: 'Left < 6 months', value: fmtNum(s.earlyChurned) }] } },
+      { cls: 'kpi-red', l: tLbl('Left Rate', 'Churn Rate'), v: fmtPct(s.churnRate), b: `~${Math.round(s.churnRate)} in 100`, s: `Baseline ${fmtPct(base.churnRate)}`, tip: { title: tLbl('Customers Who Left', 'Churn Rate'), sentence: 'Share of subscribers who cancelled.', rows: [{ label: 'Formula', value: 'Cancelled / Total' }, { label: 'Filtered', value: fmtPct(s.churnRate, 2) }] } },
+      { cls: 'kpi-amber', l: tLbl('Value / Customer', 'Average CLV'), v: fmtINR(s.avgCLV), b: `${s.avgTenure.toFixed(1)} mo`, s: 'Avg total spent', tip: { title: tLbl('Value per Customer', 'Average CLV'), sentence: 'Average ₹ spent by each customer.', rows: [{ label: 'Active Avg', value: fmtINR(s.actCLV) }, { label: 'Leaver Avg', value: fmtINR(s.chCLV) }] } },
+      { cls: 'kpi-red', l: 'Annualised Loss', v: fmtINR(s.lostAnnual, true), b: 'Est. / Year', s: 'From cancelled plans', tip: { title: 'Revenue Lost to Churn', sentence: 'Estimated yearly sales lost from cancelled subscriptions (12-month cycle assumed).', rows: [{ label: 'Exact Annualised', value: fmtINR(s.lostAnnual) }] } }
+    ];
+    document.getElementById('s2-kpis').innerHTML = cards.map(k => `<div class="kpi-card ${k.cls}" data-kpi-tip='${JSON.stringify(k.tip).replace(/'/g, "&apos;")}'><div class="kpi-header-row"><span class="kpi-label">${k.l}</span><span class="kpi-delta-badge">${k.b}</span></div><div class="kpi-value">${k.v}</div><span class="kpi-sub">${k.s}</span></div>`).join('');
 
-    const timeSeries = calculateMonthlyTimeSeries(state.filteredCustomers);
-    const months = timeSeries.map(t => t.month);
-    const joined = timeSeries.map(t => t.joined);
-    const canceled = timeSeries.map(t => -t.canceled);
+    renderChart('s2-chart-gauge', tc => ({
+      tooltip: { formatter: () => ttCard(tLbl('Customers Who Left', 'Churn Rate'), `About ${Math.round(s.churnRate)} in every 100 customers cancelled.`, [{ color: '#DC2626', label: 'Current Rate', value: fmtPct(s.churnRate, 2) }, { label: 'Target (6-mo)', value: fmtPct(Math.max(0, s.churnRate - 7.5), 1) }]) },
+      series: [{ type: 'gauge', startAngle: 195, endAngle: -15, min: 0, max: 100, progress: { show: true, width: 14, roundCap: true, itemStyle: { color: '#DC2626' } }, axisLine: { lineStyle: { width: 14, color: [[1, tc.grid]] } }, pointer: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, detail: { formatter: v => `${v.toFixed(1)}%`, color: tc.title, fontSize: 24, fontWeight: 800, offsetCenter: [0, '6%'] }, data: [{ value: Number(s.churnRate.toFixed(1)) }] }]
+    }), rows.length > 0);
+    document.getElementById('s2-insight-gauge').innerHTML = `Roughly <strong>${Math.round(s.churnRate)} in 100</strong> customers left (${fmtNum(s.churned)} people).`;
 
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: params => {
-          let str = `<strong>${params[0].name}</strong><br/>`;
-          params.forEach(p => {
-            str += `${p.seriesName}: <strong>${Math.abs(p.value)}</strong><br/>`;
-          });
-          return str;
-        }
-      },
-      legend: { data: ['New Signups', 'Cancellations'], top: 0, textStyle: { fontSize: 10 } },
-      grid: { top: 25, right: 15, bottom: 25, left: 35 },
-      xAxis: {
-        type: 'category',
-        data: months,
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: {
-          color: '#64748b', fontSize: 9,
-          interval: 5,
-          formatter: v => v.substring(2)
-        }
-      },
-      yAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: {
-          color: '#64748b', fontSize: 10,
-          formatter: v => Math.abs(v).toString()
-        },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
+    renderChart('s2-chart-donut', tc => ({
+      tooltip: { trigger: 'item', formatter: p => ttCard(p.name, `${fmtNum(p.value)} subscribers (${fmtPct(safeDiv(p.value, s.n) * 100)} of total).`, [{ color: p.color, label: 'Customers', value: fmtNum(p.value) }]) },
+      legend: { bottom: 0, textStyle: { color: tc.text, fontSize: 11 } },
+      series: [{ type: 'pie', radius: ['48%', '74%'], center: ['50%', '43%'], label: { show: false }, itemStyle: { borderRadius: 5, borderColor: tc.bg, borderWidth: 2 }, data: [{ name: 'Active', value: s.active, itemStyle: { color: '#059669' } }, { name: 'Churned', value: s.churned, itemStyle: { color: '#DC2626' } }] }],
+      graphic: [{ type: 'text', left: 'center', top: '38%', style: { text: fmtNum(s.n), font: '800 18px Inter,sans-serif', fill: tc.title } }]
+    }), rows.length > 0, p => toggleSet(state.filters.status, p.name));
+    document.getElementById('s2-insight-donut').innerHTML = `<strong>${fmtNum(s.active)}</strong> stay active; <strong>${fmtNum(s.earlyChurned)}</strong> left before 6 months.`;
+
+    const pm = groupBy(rows, r => r.SubscriptionType);
+    const mRate = (pm.get('Monthly') || { churnRate: 0 }).churnRate;
+    const aRate = (pm.get('Annual') || { churnRate: 0 }).churnRate;
+    document.getElementById('s2-findings').innerHTML = `
+      <li><strong>Monthly Plans Leave Most:</strong> About <strong>${Math.round(mRate)} in 100</strong> Monthly buyers left vs <strong>${Math.round(aRate)} in 100</strong> on Annual plans.</li>
+      <li><strong>Early 6-Month Danger:</strong> <strong>${fmtNum(s.earlyChurned)}</strong> leavers cancelled before completing 6 months.</li>
+      <li><strong>Stayers Spend More:</strong> Active subscribers spend <strong>${fmtINR(s.actCLV)}</strong> on average vs <strong>${fmtINR(s.chCLV)}</strong> for leavers.</li>`;
+  }
+
+  function renderSlide3(rows) {
+    const s = summarize(rows);
+    document.getElementById('s3-quality-kpis').innerHTML = [
+      { cls: 'kpi-green', l: 'Verified Rows', v: fmtNum(rows.length), b: '0 Duplicates', s: 'All 11 columns matched' },
+      { cls: 'kpi-amber', l: 'Date Span', v: '3 Years', b: '2023–2026', s: 'Snapshot: 2026-11-21' },
+      { cls: 'kpi-green', l: 'Blank CancelDate', v: fmtNum(s.active), b: 'Active Stayers', s: 'Blank means still subscribed' },
+      { cls: '', l: 'Avg Activity Score', v: s.avgEng.toFixed(1), b: '0–100 Scale', s: 'Zero invalid scores' }
+    ].map(k => `<div class="kpi-card ${k.cls}"><div class="kpi-header-row"><span class="kpi-label">${k.l}</span><span class="kpi-delta-badge">${k.b}</span></div><div class="kpi-value">${k.v}</div><span class="kpi-sub">${k.s}</span></div>`).join('');
+  }
+
+  function renderSlide4(rows, s) {
+    const jQ = groupBy(rows, r => r.JoinQ), cQ = groupBy(rows.filter(r => r.Churned), r => r.CancelQ);
+    const qs = [...new Set([...jQ.keys(), ...cQ.keys()])].filter(Boolean).sort();
+    renderChart('s4-chart-trend', tc => ({
+      tooltip: { trigger: 'axis', formatter: p => { const q = qs[p[0].dataIndex]; const j = (jQ.get(q) || { n: 0 }).n, c = (cQ.get(q) || { n: 0 }).n; return ttCard(`Quarter: ${q}`, `New joins vs cancellations in ${q}.`, [{ color: '#059669', label: 'New Joins', value: fmtNum(j) }, { color: '#DC2626', label: 'Cancelled', value: fmtNum(c) }]); } },
+      legend: { top: 0, textStyle: { color: tc.text, fontSize: 11 } },
+      grid: { left: 46, right: 16, top: 28, bottom: 26 },
+      xAxis: { type: 'category', data: qs, axisLabel: { color: tc.text, fontSize: 10 } },
+      yAxis: { type: 'value', axisLabel: { color: tc.text }, splitLine: { lineStyle: { color: tc.grid } } },
       series: [
-        {
-          name: 'New Signups',
-          type: 'bar',
-          stack: 'total',
-          data: joined,
-          itemStyle: { color: '#10b981', borderRadius: [2, 2, 0, 0] }
-        },
-        {
-          name: 'Cancellations',
-          type: 'bar',
-          stack: 'total',
-          data: canceled,
-          itemStyle: { color: '#ef4444', borderRadius: [0, 0, 2, 2] }
-        }
+        { name: 'New Joins', type: 'bar', itemStyle: { color: '#059669', borderRadius: [4, 4, 0, 0] }, data: qs.map(q => (jQ.get(q) || { n: 0 }).n) },
+        { name: 'Cancelled', type: 'bar', itemStyle: { color: '#DC2626', borderRadius: [4, 4, 0, 0] }, data: qs.map(q => (cQ.get(q) || { n: 0 }).n) }
       ]
-    };
+    }), qs.length > 0);
 
-    state.charts.inflowOutflow.setOption(option);
-  }
+    const milestones = [1, 3, 6, 12, 18, 24];
+    const surv = milestones.map(m => Number((safeDiv(rows.filter(r => !r.Churned || r.TenureMonths >= m).length, rows.length) * 100).toFixed(1)));
+    renderChart('s4-chart-cohort', tc => ({
+      tooltip: { trigger: 'axis', formatter: p => ttCard(`Month ${milestones[p[0].dataIndex]}`, `Share of subscribers still active after ${milestones[p[0].dataIndex]} months.`, [{ color: '#6D28D9', label: 'Customers Staying', value: `${surv[p[0].dataIndex]}%` }]) },
+      grid: { left: 46, right: 16, top: 20, bottom: 26 },
+      xAxis: { type: 'category', data: milestones.map(m => `Mo ${m}`), axisLabel: { color: tc.text } },
+      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: tc.text, formatter: '{value}%' }, splitLine: { lineStyle: { color: tc.grid } } },
+      series: [{ type: 'line', smooth: true, markLine: { silent: true, lineStyle: { color: '#DC2626', type: 'dashed' }, data: [{ xAxis: 'Mo 6', label: { formatter: '6-month mark' } }] }, lineStyle: { width: 3, color: '#6D28D9' }, areaStyle: { color: 'rgba(109,40,217,0.14)' }, data: surv }]
+    }), rows.length > 0);
 
-  function renderCohortHeatmap() {
-    const dom = document.getElementById('chart_cohort_heatmap');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.cohortHeatmap) state.charts.cohortHeatmap = echarts.init(dom);
-
-    const cohortData = calculateCohortRetentionMatrix(state.filteredCustomers);
-    const cohorts = cohortData.cohorts;
-    const evalMonths = cohortData.evalMonths.map(m => `M${m}`);
-
-    const heatValues = [];
-    cohortData.matrix.forEach((row, rIdx) => {
-      cohortData.evalMonths.forEach((m, cIdx) => {
-        const rate = row.rates[m];
-        if (rate !== null) {
-          heatValues.push([cIdx, rIdx, Math.round(rate * 100)]);
-        }
-      });
+    renderStory('s4-story', {
+      keyLabel: '6-Month Survival', keyValue: `${surv[2]}%`, keySub: `${fmtNum(s.earlyChurned)} left before Month 6`,
+      simpleWords: `Out of every 100 subscribers, about ${Math.round(surv[2])} stay past Month 6.`,
+      bullets: [`<strong>${fmtNum(s.earlyChurned)}</strong> cancellations happened in the first 5 months.`, `Active base currently holds <strong>${fmtNum(s.active)}</strong> subscribers.`],
+      why: 'Stopping early drop-off before Month 6 is the biggest lever to hit our 5–10% churn reduction goal.',
+      actionLabel: 'Do on Monday', actionText: 'Send a Month-3 check-in bonus to keep new subscribers past the 6-month mark.'
     });
-
-    const option = {
-      tooltip: {
-        position: 'top',
-        formatter: params => {
-          const cName = cohorts[params.value[1]];
-          const mName = evalMonths[params.value[0]];
-          return `<strong>${cName} (${mName})</strong><br/>Retention Rate: <strong>${params.value[2]}%</strong>`;
-        }
-      },
-      grid: { top: 15, right: 15, bottom: 25, left: 60 },
-      xAxis: {
-        type: 'category',
-        data: evalMonths,
-        splitArea: { show: true },
-        axisLabel: { color: '#475569', fontSize: 9 }
-      },
-      yAxis: {
-        type: 'category',
-        data: cohorts,
-        splitArea: { show: true },
-        axisLabel: { color: '#475569', fontSize: 9 }
-      },
-      visualMap: {
-        min: 20,
-        max: 100,
-        calculable: false,
-        orient: 'horizontal',
-        left: 'center',
-        bottom: 0,
-        show: false,
-        inRange: {
-          color: ['#fee2e2', '#fef3c7', '#d1fae5', '#10b981', '#047857']
-        }
-      },
-      series: [{
-        name: 'Retention',
-        type: 'heatmap',
-        data: heatValues,
-        label: {
-          show: true,
-          formatter: p => `${p.value[2]}%`,
-          fontSize: 9,
-          color: '#1e293b'
-        },
-        itemStyle: {
-          borderWidth: 1,
-          borderColor: '#ffffff'
-        }
-      }]
-    };
-
-    state.charts.cohortHeatmap.setOption(option);
   }
 
-  // -------------------------------------------------------------------------
-  // SLIDE 5: Segment Analysis (Multi-Dimensional Risk Breakdown)
-  // -------------------------------------------------------------------------
-  function renderSlide5() {
-    renderSegmentBar('chart_seg_sub', 'subscriptionType', 'subscription');
-    renderSegmentBar('chart_seg_pay', 'paymentMode', 'payment');
-    renderSegmentBar('chart_seg_age', 'ageGroup', 'ageGroup');
-    renderLocationSegmentBar();
-    renderRiskSegmentsTable();
+  function renderSlide5(rows, s) {
+    const pm = groupBy(rows, r => r.SubscriptionType), am = groupBy(rows, r => r.AgeGroup);
+    const cats = [...PLAN_ORDER, ...AGE_ORDER];
+    const rates = [...PLAN_ORDER.map(k => (pm.get(k) || { churnRate: 0 }).churnRate), ...AGE_ORDER.map(k => (am.get(k) || { churnRate: 0 }).churnRate)];
+    const maxR = Math.max(...rates), minR = Math.min(...rates.filter(x => x > 0), maxR);
 
-    const subSegs = calculateSegmentBreakdown(state.filteredCustomers, 'subscriptionType');
-    const monthlySeg = subSegs.find(s => s.name === 'Monthly') || { churnRate: 0.606, churned: 1679 };
-    const annualSeg = subSegs.find(s => s.name === 'Annual') || { churnRate: 0.146 };
-    const diffPts = ((monthlySeg.churnRate - annualSeg.churnRate) * 100).toFixed(1);
+    renderChart('s5-chart-planage', tc => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => ttCard(cats[p[0].dataIndex], `Share of ${cats[p[0].dataIndex]} subscribers who cancelled.`, [{ color: p[0].color, label: tLbl('Left Rate', 'Churn Rate'), value: fmtPct(rates[p[0].dataIndex]) }, { label: 'vs Overall Avg', value: `${(rates[p[0].dataIndex] - s.churnRate).toFixed(1)} pp` }]) },
+      grid: { left: 46, right: 16, top: 20, bottom: 26 },
+      xAxis: { type: 'category', data: cats, axisLabel: { color: tc.text, fontSize: 10.5 } },
+      yAxis: { type: 'value', max: 100, axisLabel: { color: tc.text, formatter: '{value}%' }, splitLine: { lineStyle: { color: tc.grid } } },
+      series: [{ type: 'bar', barMaxWidth: 34, markLine: { silent: true, data: [{ yAxis: s.churnRate, label: { formatter: 'Avg' } }] }, itemStyle: { borderRadius: [5, 5, 0, 0], color: p => (rates[p.dataIndex] === maxR ? '#DC2626' : (rates[p.dataIndex] === minR ? '#059669' : '#6D28D9')) }, data: rates.map(r => Number(r.toFixed(1))) }]
+    }), rows.length > 0, p => { if (PLAN_ORDER.includes(p.name)) toggleSet(state.filters.plans, p.name); else toggleSet(state.filters.ageGroups, p.name); });
 
-    const insightS5 = document.getElementById('insight_s5');
-    if (insightS5) {
-      insightS5.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>Monthly plan churn is <strong>${(monthlySeg.churnRate * 100).toFixed(1)}%</strong> (${diffPts} pts above Annual at ${(annualSeg.churnRate * 100).toFixed(1)}%), representing ${monthlySeg.churned.toLocaleString()} lost subscribers.</span>`;
-    }
-  }
+    const cm = groupBy(rows, r => r.Location);
+    const cities = [...cm.values()].sort((a, b) => b.churnRate - a.churnRate);
+    renderChart('s5-chart-city', tc => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => { const c = cities[p[0].dataIndex]; return ttCard(c.key, `${c.churned} of ${c.n} subscribers left in ${c.key}.`, [{ color: p[0].color, label: tLbl('Left Rate', 'Churn Rate'), value: fmtPct(c.churnRate) }, { label: 'vs Avg', value: `${(c.churnRate - s.churnRate).toFixed(1)} pp` }]); } },
+      grid: { left: 46, right: 16, top: 20, bottom: 32 },
+      xAxis: { type: 'category', data: cities.map(c => c.key), axisLabel: { color: tc.text, fontSize: 10, rotate: 25 } },
+      yAxis: { type: 'value', max: 100, axisLabel: { color: tc.text, formatter: '{value}%' }, splitLine: { lineStyle: { color: tc.grid } } },
+      series: [{ type: 'bar', barMaxWidth: 28, markLine: { silent: true, data: [{ yAxis: s.churnRate }] }, itemStyle: { borderRadius: [5, 5, 0, 0], color: p => (p.dataIndex === 0 ? '#DC2626' : (p.dataIndex === cities.length - 1 ? '#059669' : '#6D28D9')) }, data: cities.map(c => Number(c.churnRate.toFixed(1))) }]
+    }), cities.length > 0, p => { state.filters.location = (state.filters.location === p.name) ? '' : p.name; document.getElementById('filter-location-select').value = state.filters.location; renderAll(); });
 
-  function renderSegmentBar(containerId, dataKey, filterKey) {
-    const dom = document.getElementById(containerId);
-    if (!dom || !window.echarts) return;
-    if (!state.charts[containerId]) {
-      state.charts[containerId] = echarts.init(dom);
-      state.charts[containerId].on('click', params => {
-        triggerCrossFilter(filterKey, params.name);
-      });
-    }
-
-    const segments = calculateSegmentBreakdown(state.filteredCustomers, dataKey);
-    const names = segments.map(s => s.name);
-    const rates = segments.map(s => (s.churnRate * 100).toFixed(1));
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: params => {
-          const pt = params[0];
-          const seg = segments.find(s => s.name === pt.name);
-          return `<strong>${pt.name}</strong><br/>` +
-                 `Churn Rate: <strong>${pt.value}%</strong><br/>` +
-                 `Subscribers: <strong>${seg.total.toLocaleString()}</strong> (${seg.churned} churned)<br/>` +
-                 `<em>Click to cross-filter</em>`;
-        }
-      },
-      grid: { top: 15, right: 25, bottom: 20, left: 65 },
-      xAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 9, formatter: '{value}%' },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      yAxis: {
-        type: 'category',
-        data: names,
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#334155', fontSize: 10 }
-      },
-      series: [{
-        name: 'Churn Rate',
-        type: 'bar',
-        data: rates,
-        barWidth: '55%',
-        itemStyle: {
-          color: function (params) {
-            const val = parseFloat(params.value);
-            return val > 50 ? '#ef4444' : val > 35 ? '#f59e0b' : '#10b981';
-          },
-          borderRadius: [0, 4, 4, 0]
-        },
-        label: {
-          show: true,
-          position: 'right',
-          formatter: '{c}%',
-          fontSize: 9,
-          color: '#475569'
-        }
-      }]
-    };
-
-    state.charts[containerId].setOption(option);
-  }
-
-  function renderLocationSegmentBar() {
-    const dom = document.getElementById('chart_seg_loc');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.segLoc) {
-      state.charts.segLoc = echarts.init(dom);
-      state.charts.segLoc.on('click', params => {
-        triggerCrossFilter('location', params.name);
-      });
-    }
-
-    const segments = calculateSegmentBreakdown(state.filteredCustomers, 'location');
-    // Top 3 highest and bottom 3 lowest
-    const sorted = [...segments];
-    const top3 = sorted.slice(0, 3);
-    const bottom3 = sorted.slice(-3);
-    const combined = [...top3, ...bottom3];
-
-    const names = combined.map(s => s.name);
-    const rates = combined.map(s => (s.churnRate * 100).toFixed(1));
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: params => {
-          const pt = params[0];
-          const seg = combined.find(s => s.name === pt.name);
-          return `<strong>${pt.name}</strong><br/>` +
-                 `Churn Rate: <strong>${pt.value}%</strong><br/>` +
-                 `Total: <strong>${seg.total}</strong><br/>` +
-                 `<em>Click to cross-filter</em>`;
-        }
-      },
-      grid: { top: 15, right: 25, bottom: 20, left: 65 },
-      xAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 9, formatter: '{value}%' },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      yAxis: {
-        type: 'category',
-        data: names,
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#334155', fontSize: 10 }
-      },
-      series: [{
-        name: 'Location Churn Rate',
-        type: 'bar',
-        data: rates,
-        barWidth: '55%',
-        itemStyle: {
-          color: function (params) {
-            return parseFloat(params.value) > 48 ? '#ef4444' : '#0d9488';
-          },
-          borderRadius: [0, 4, 4, 0]
-        },
-        label: { show: true, position: 'right', formatter: '{c}%', fontSize: 9 }
-      }]
-    };
-
-    state.charts.segLoc.setOption(option);
-  }
-
-  function renderRiskSegmentsTable() {
-    const tbody = document.getElementById('tbody_risk_segments');
-    if (!tbody) return;
-
-    // Collect multi-dimensional risks
-    const risks = [];
-    ['subscriptionType', 'paymentMode', 'ageGroup'].forEach(dim => {
-      const segs = calculateSegmentBreakdown(state.filteredCustomers, dim);
-      segs.forEach(s => {
-        risks.push({
-          dim: dim === 'subscriptionType' ? 'Plan' : dim === 'paymentMode' ? 'Payment' : 'Age',
-          name: s.name,
-          total: s.total,
-          churned: s.churned,
-          churnRate: s.churnRate,
-          avgCLV: s.avgCLV,
-          revLost: s.revLost
-        });
-      });
+    const mRate = (pm.get('Monthly') || { churnRate: 0 }).churnRate, aRate = (pm.get('Annual') || { churnRate: 0 }).churnRate;
+    renderStory('s5-story', {
+      keyLabel: 'Highest-Risk Plan', keyValue: `Monthly (${Math.round(mRate)}%)`, keySub: `vs Annual at ${Math.round(aRate)}%`,
+      simpleWords: `Roughly ${Math.round(mRate / 10)} in 10 Monthly subscribers cancel, compared to ${Math.round(aRate / 10)} in 10 Annual subscribers.`,
+      bullets: [cities[0] ? `Highest-churn city: <strong>${cities[0].key}</strong> (${fmtPct(cities[0].churnRate)}).` : 'No city data.', `Young adults (<strong>18–25</strong>) show elevated early cancellations.`],
+      why: 'Answers Q1: Moving even 15% of Monthly buyers onto Quarterly/Annual plans cuts churn directly.',
+      actionLabel: 'Do on Monday', actionText: 'Offer Monthly buyers a 1-click upgrade to Quarterly with 50% off their next box.'
     });
+  }
 
-    risks.sort((a, b) => b.churnRate - a.churnRate);
+  function renderSlide6(rows) {
+    const em = groupBy(rows, r => r.EngBand);
+    const eData = ENG_ORDER.map(k => em.get(k) || { key: k, churnRate: 0, avgTenure: 0, n: 0 });
 
-    let html = '';
-    risks.forEach(r => {
-      const pct = (r.churnRate * 100).toFixed(1);
-      const barWidth = Math.min(100, Math.round(r.churnRate * 100));
-      const barColor = r.churnRate > 0.5 ? 'red' : r.churnRate > 0.35 ? 'purple' : 'teal';
+    renderChart('s6-chart-eng', tc => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => { const d = eData[p[0].dataIndex]; return ttCard(d.key, `${fmtNum(d.n)} customers in this activity band.`, [{ color: p[0].color, label: tLbl('Left Rate', 'Churn Rate'), value: fmtPct(d.churnRate) }]); } },
+      grid: { left: 46, right: 16, top: 20, bottom: 26 },
+      xAxis: { type: 'category', data: ENG_ORDER, axisLabel: { color: tc.text } },
+      yAxis: { type: 'value', max: 100, axisLabel: { color: tc.text, formatter: '{value}%' }, splitLine: { lineStyle: { color: tc.grid } } },
+      series: [{ type: 'bar', barMaxWidth: 46, itemStyle: { borderRadius: [6, 6, 0, 0], color: p => ['#DC2626', '#D97706', '#059669'][p.dataIndex] }, data: eData.map(d => Number(d.churnRate.toFixed(1))) }]
+    }), rows.length > 0, p => toggleSet(state.filters.engBands, p.name));
 
-      html += `
-        <tr>
-          <td><span class="badge badge-gray">${r.dim}</span></td>
-          <td><strong>${r.name}</strong></td>
-          <td class="number">${r.total.toLocaleString()}</td>
-          <td class="number">${r.churned.toLocaleString()}</td>
-          <td class="number">
-            <div class="data-bar-cell">
-              <div class="data-bar-fill ${barColor}" style="width: ${barWidth}%;"></div>
-              <span class="data-bar-text">${pct}%</span>
-            </div>
-          </td>
-          <td class="number">${formatCurrencyINR(r.avgCLV)}</td>
-          <td class="number" style="color: #ef4444; font-weight: 600;">${formatCurrencyINR(r.revLost)}</td>
-        </tr>
-      `;
+    renderChart('s6-chart-tenure', tc => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => { const d = eData[p[0].dataIndex]; return ttCard(d.key, `Average months stayed for ${d.key} activity.`, [{ color: p[0].color, label: 'Months Stayed', value: `${d.avgTenure.toFixed(1)} mo` }]); } },
+      grid: { left: 46, right: 16, top: 20, bottom: 26 },
+      xAxis: { type: 'category', data: ENG_ORDER, axisLabel: { color: tc.text } },
+      yAxis: { type: 'value', axisLabel: { color: tc.text, formatter: '{value}m' }, splitLine: { lineStyle: { color: tc.grid } } },
+      series: [{ type: 'bar', barMaxWidth: 46, markLine: { silent: true, lineStyle: { color: '#DC2626', type: 'dashed' }, data: [{ yAxis: 6, label: { formatter: '6-month mark' } }] }, itemStyle: { borderRadius: [6, 6, 0, 0], color: '#6D28D9' }, data: eData.map(d => Number(d.avgTenure.toFixed(1))) }]
+    }), rows.length > 0);
+
+    renderStory('s6-story', {
+      keyLabel: 'Low-Activity Left Rate', keyValue: fmtPct(eData[0].churnRate), keySub: `vs High Activity at ${fmtPct(eData[2].churnRate)}`,
+      simpleWords: `Low activity and leaving tend to go together — but data alone cannot prove which causes which.`,
+      bullets: [`Low-activity users stay only <strong>${eData[0].avgTenure.toFixed(1)} months</strong> on average.`, `High-activity fans stay <strong>${eData[2].avgTenure.toFixed(1)} months</strong>.`],
+      why: 'Answers Q2: Spotting quiet subscribers early lets us re-engage them before they cancel.',
+      actionLabel: 'Do on Monday', actionText: 'Send a 2-tap box customization reminder to every active customer with activity under 40.'
     });
-
-    tbody.innerHTML = html;
-
-    const btnExport = document.getElementById('btnExportRiskSegments');
-    if (btnExport) {
-      btnExport.onclick = () => exportArrayToCSV(risks, 'boxify_high_risk_segments.csv');
-    }
   }
 
-  // -------------------------------------------------------------------------
-  // SLIDE 6: Engagement vs Churn
-  // -------------------------------------------------------------------------
-  function renderSlide6() {
-    renderEngagementBandChart();
-    renderEngagementScatterChart();
-
-    const engSegs = calculateSegmentBreakdown(state.filteredCustomers, 'engagementBand');
-    const lowSeg = engSegs.find(s => s.name && s.name.includes('Low')) || { churnRate: 0.789 };
-    const highSeg = engSegs.find(s => s.name && s.name.includes('High')) || { churnRate: 0.286 };
-    const ratio = highSeg.churnRate > 0 ? (lowSeg.churnRate / highSeg.churnRate).toFixed(1) : '2.8';
-
-    const insightS6 = document.getElementById('insight_s6');
-    if (insightS6) {
-      insightS6.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>Low engagement (&le;30) churns at <strong>${(lowSeg.churnRate * 100).toFixed(1)}%</strong>—<strong>${ratio}x</strong> the rate of high engagement users (${(highSeg.churnRate * 100).toFixed(1)}%).</span>`;
-    }
-  }
-
-  function renderEngagementBandChart() {
-    const dom = document.getElementById('chart_eng_band');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.engBand) state.charts.engBand = echarts.init(dom);
-
-    const bands = calculateSegmentBreakdown(state.filteredCustomers, 'engagementBand');
-    const order = ['Low (0-30)', 'Medium (31-60)', 'High (61-100)'];
-    const sorted = order.map(k => bands.find(b => b.name === k) || { name: k, churnRate: 0, total: 0 });
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: params => {
-          const pt = params[0];
-          const b = sorted.find(x => x.name === pt.name);
-          return `<strong>${pt.name}</strong><br/>` +
-                 `Churn Rate: <strong>${pt.value}%</strong><br/>` +
-                 `Total Members: <strong>${b.total.toLocaleString()}</strong>`;
-        }
-      },
-      grid: { top: 20, right: 20, bottom: 25, left: 45 },
-      xAxis: {
-        type: 'category',
-        data: sorted.map(s => s.name),
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#334155', fontSize: 11, fontWeight: 600 }
-      },
-      yAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 10, formatter: '{value}%' },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      series: [{
-        name: 'Churn Rate',
-        type: 'bar',
-        data: sorted.map(s => (s.churnRate * 100).toFixed(1)),
-        barWidth: '45%',
-        itemStyle: {
-          color: function (params) {
-            return params.dataIndex === 0 ? '#ef4444' : params.dataIndex === 1 ? '#f59e0b' : '#10b981';
-          },
-          borderRadius: [4, 4, 0, 0]
-        },
-        label: { show: true, position: 'top', formatter: '{c}%', fontSize: 10, fontWeight: 700 }
-      }]
-    };
-
-    state.charts.engBand.setOption(option);
-  }
-
-  function renderEngagementScatterChart() {
-    const dom = document.getElementById('chart_eng_scatter');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.engScatter) state.charts.engScatter = echarts.init(dom);
-
-    // Sample up to 600 points for crisp responsive rendering without browser lag
-    const sample = state.filteredCustomers.length > 600
-      ? state.filteredCustomers.filter((_, idx) => idx % Math.ceil(state.filteredCustomers.length / 600) === 0)
-      : state.filteredCustomers;
-
-    const activePoints = [];
-    const churnedPoints = [];
-
-    sample.forEach(c => {
-      const pt = [c.tenureMonths, c.engagementScore, c.customerId];
-      if (c.isChurned) churnedPoints.push(pt);
-      else activePoints.push(pt);
-    });
-
-    const option = {
-      tooltip: {
-        formatter: params => {
-          const pt = params.value;
-          return `<strong>${pt[2]}</strong><br/>` +
-                 `Tenure: <strong>${pt[0]} Months</strong><br/>` +
-                 `Engagement Score: <strong>${pt[1]}</strong><br/>` +
-                 `Status: <strong>${params.seriesName}</strong>`;
-        }
-      },
-      legend: { data: ['Active Members', 'Churned Subscribers'], top: 0, textStyle: { fontSize: 10 } },
-      grid: { top: 30, right: 20, bottom: 30, left: 45 },
-      xAxis: {
-        name: 'Tenure (Months)',
-        nameLocation: 'middle',
-        nameGap: 20,
-        nameTextStyle: { fontSize: 10, color: '#64748b' },
-        type: 'value',
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      yAxis: {
-        name: 'Engagement Score',
-        nameLocation: 'middle',
-        nameGap: 30,
-        nameTextStyle: { fontSize: 10, color: '#64748b' },
-        type: 'value',
-        min: 0,
-        max: 100,
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
+  function renderSlide7(rows, s) {
+    renderChart('s7-chart-clv', tc => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => ttCard(p[0].name, 'Compares stayers vs leavers.', [{ color: '#059669', label: 'Active Stayers', value: p[0].dataIndex === 0 ? fmtINR(s.actCLV) : `${s.actTen.toFixed(1)} mo` }, { color: '#DC2626', label: 'Left Boxify', value: p[0].dataIndex === 0 ? fmtINR(s.chCLV) : `${s.chTen.toFixed(1)} mo` }]) },
+      legend: { top: 0, textStyle: { color: tc.text, fontSize: 11 } },
+      grid: { left: 54, right: 16, top: 28, bottom: 26 },
+      xAxis: { type: 'category', data: [tLbl('Value / Customer (₹)', 'Avg CLV (₹)'), 'Months Stayed (Scaled x500)'], axisLabel: { color: tc.text } },
+      yAxis: { type: 'value', axisLabel: { color: tc.text, formatter: v => fmtINR(v, true) }, splitLine: { lineStyle: { color: tc.grid } } },
       series: [
-        {
-          name: 'Active Members',
-          type: 'scatter',
-          data: activePoints,
-          symbolSize: 6,
-          itemStyle: { color: '#0d9488', opacity: 0.6 }
-        },
-        {
-          name: 'Churned Subscribers',
-          type: 'scatter',
-          data: churnedPoints,
-          symbolSize: 6,
-          itemStyle: { color: '#ef4444', opacity: 0.6 }
-        }
+        { name: 'Active Stayers', type: 'bar', barMaxWidth: 42, itemStyle: { color: '#059669', borderRadius: [5, 5, 0, 0] }, data: [Math.round(s.actCLV), Math.round(s.actTen * 500)] },
+        { name: 'Left Boxify', type: 'bar', barMaxWidth: 42, itemStyle: { color: '#DC2626', borderRadius: [5, 5, 0, 0] }, data: [Math.round(s.chCLV), Math.round(s.chTen * 500)] }
       ]
-    };
+    }), rows.length > 0);
 
-    state.charts.engScatter.setOption(option);
-  }
+    const ch = rows.filter(r => r.Churned);
+    const bins = ['1-3 mo', '4-5 mo', '6-12 mo', '13+ mo'];
+    const bCnt = [ch.filter(r => r.TenureMonths <= 3).length, ch.filter(r => r.TenureMonths >= 4 && r.TenureMonths <= 5).length, ch.filter(r => r.TenureMonths >= 6 && r.TenureMonths <= 12).length, ch.filter(r => r.TenureMonths > 12).length];
+    renderChart('s7-chart-hist', tc => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => ttCard(bins[p[0].dataIndex], 'Number of cancelled subscribers who left in this window.', [{ color: p[0].color, label: 'Leavers', value: fmtNum(bCnt[p[0].dataIndex]) }]) },
+      grid: { left: 46, right: 16, top: 20, bottom: 26 },
+      xAxis: { type: 'category', data: bins, axisLabel: { color: tc.text } },
+      yAxis: { type: 'value', axisLabel: { color: tc.text }, splitLine: { lineStyle: { color: tc.grid } } },
+      series: [{ type: 'bar', barMaxWidth: 44, itemStyle: { borderRadius: [5, 5, 0, 0], color: p => (p.dataIndex < 2 ? '#DC2626' : '#6D28D9') }, data: bCnt }]
+    }), ch.length > 0);
 
-  // -------------------------------------------------------------------------
-  // SLIDE 7: CLV and Revenue Impact
-  // -------------------------------------------------------------------------
-  function renderSlide7(kpis) {
-    renderCLVComparisonChart(kpis);
-    renderTenureHistogram();
-    renderRevenueTreemap();
-    renderSurvivalCurves();
-
-    const earlyRevLost = state.filteredCustomers.filter(c => c.isEarlyChurn).reduce((sum, c) => sum + c.monthlyRate * 12, 0);
-    const insightS7 = document.getElementById('insight_s7');
-    if (insightS7) {
-      insightS7.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>Early churn (&lt;6 months) accounts for <strong>${(kpis.earlyChurnPct * 100).toFixed(1)}%</strong> of cancellations and <strong>${formatCurrencyINR(earlyRevLost)}</strong> in annual lost revenue.</span>`;
-    }
-  }
-
-  function renderCLVComparisonChart(kpis) {
-    const dom = document.getElementById('chart_clv_comp');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.clvComp) state.charts.clvComp = echarts.init(dom);
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: params => `${params[0].name}: <strong>${formatCurrencyINR(params[0].value)}</strong>`
-      },
-      grid: { top: 15, right: 30, bottom: 20, left: 95 },
-      xAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 9, formatter: v => `₹${Math.round(v/1000)}k` },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      yAxis: {
-        type: 'category',
-        data: ['Active Base', 'Overall Base', 'Churned Base'],
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#334155', fontSize: 10, fontWeight: 600 }
-      },
-      series: [{
-        name: 'Average CLV',
-        type: 'bar',
-        data: [
-          { value: Math.round(kpis.avgCLVActive), itemStyle: { color: '#0d9488' } },
-          { value: Math.round(kpis.avgCLV), itemStyle: { color: '#6366f1' } },
-          { value: Math.round(kpis.avgCLVChurned), itemStyle: { color: '#ef4444' } }
-        ],
-        barWidth: '45%',
-        itemStyle: { borderRadius: [0, 4, 4, 0] },
-        label: {
-          show: true,
-          position: 'right',
-          formatter: p => formatCurrencyINR(p.value),
-          fontSize: 10,
-          fontWeight: 700
-        }
-      }]
-    };
-
-    state.charts.clvComp.setOption(option);
-  }
-
-  function renderTenureHistogram() {
-    const dom = document.getElementById('chart_tenure_hist');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.tenureHist) state.charts.tenureHist = echarts.init(dom);
-
-    // Tenure distribution for churned customers (0 to 35 months)
-    const bins = ['M0-1', 'M2-3', 'M4-5', 'M6-8', 'M9-12', 'M13-18', 'M19-24', 'M25+'];
-    const counts = [0, 0, 0, 0, 0, 0, 0, 0];
-
-    state.filteredCustomers.forEach(c => {
-      if (c.isChurned) {
-        const t = c.tenureMonths;
-        if (t <= 1) counts[0]++;
-        else if (t <= 3) counts[1]++;
-        else if (t <= 5) counts[2]++;
-        else if (t <= 8) counts[3]++;
-        else if (t <= 12) counts[4]++;
-        else if (t <= 18) counts[5]++;
-        else if (t <= 24) counts[6]++;
-        else counts[7]++;
-      }
+    renderStory('s7-story', {
+      keyLabel: 'Annualised Lost Sales', keyValue: fmtINR(s.lostAnnual, true), keySub: 'Assumes 12-month recurring cycle',
+      simpleWords: `Customers who stay spend ${fmtINR(s.actCLV)} on average, compared to ${fmtINR(s.chCLV)} for those who cancel.`,
+      bullets: [`Stayers remain <strong>${s.actTen.toFixed(1)} months</strong> vs <strong>${s.chTen.toFixed(1)} months</strong> for leavers.`, `<strong>${fmtNum(s.earlyChurned)}</strong> cancelled before completing 6 months.`],
+      why: 'Answers Q3: Keeping early leavers past Month 6 unlocks more than 2x lifetime spend.',
+      actionLabel: 'Do on Monday', actionText: 'Focus save offers on Month 2–5 subscribers before they hit the cancel button.'
     });
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: params => `Tenure ${params[0].name}: <strong>${params[0].value} cancellations</strong>`
-      },
-      grid: { top: 20, right: 15, bottom: 25, left: 40 },
-      xAxis: {
-        type: 'category',
-        data: bins,
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#475569', fontSize: 9 }
-      },
-      yAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 9 },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      series: [{
-        name: 'Churn Count',
-        type: 'bar',
-        data: counts,
-        barWidth: '60%',
-        itemStyle: {
-          color: function (params) {
-            return params.dataIndex < 3 ? '#ef4444' : '#f59e0b';
-          },
-          borderRadius: [4, 4, 0, 0]
-        },
-        label: { show: true, position: 'top', fontSize: 9 }
-      }]
-    };
-
-    state.charts.tenureHist.setOption(option);
   }
 
-  function renderRevenueTreemap() {
-    const dom = document.getElementById('chart_rev_treemap');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.revTreemap) state.charts.revTreemap = echarts.init(dom);
+  function renderSlide8(rows) {
+    const m = state.model;
+    const outOf10 = Math.round(m.testRec / 10);
+    document.getElementById('s8-headline').textContent = `Trained on 80% of customers and tested on 20%: correctly flags about ${outOf10} out of 10 leavers (${m.testAcc.toFixed(1)}% overall accuracy).`;
 
-    // Group annual revenue lost by Subscription Type and City
-    const tree = { Monthly: {}, Quarterly: {}, Annual: {} };
-    state.filteredCustomers.forEach(c => {
-      if (c.isChurned) {
-        const sub = c.subscriptionType;
-        const loc = c.location;
-        const lost = c.monthlyRate * 12;
-        if (!tree[sub][loc]) tree[sub][loc] = 0;
-        tree[sub][loc] += lost;
-      }
+    renderChart('s8-chart-factors', tc => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => ttCard(m.factors[p[0].dataIndex].name, 'Relative strength of this warning sign in our simple prediction model.', [{ color: '#6D28D9', label: 'Importance', value: m.factors[p[0].dataIndex].score.toFixed(2) }]) },
+      grid: { left: 145, right: 20, top: 16, bottom: 26 },
+      xAxis: { type: 'value', axisLabel: { color: tc.text }, splitLine: { lineStyle: { color: tc.grid } } },
+      yAxis: { type: 'category', data: m.factors.map(f => f.name).reverse(), axisLabel: { color: tc.text, fontSize: 11 } },
+      series: [{ type: 'bar', barMaxWidth: 24, itemStyle: { borderRadius: [0, 5, 5, 0], color: '#6D28D9' }, data: m.factors.map(f => Number(f.score.toFixed(2))).reverse() }]
+    }), m.factors.length > 0);
+
+    const active = rows.filter(r => !r.Churned).map(r => ({ ...r, risk: m.scoreFn ? m.scoreFn(r) : 0 })).sort((a, b) => b.risk - a.risk).slice(0, 20);
+    document.getElementById('s8-atrisk-table').innerHTML = `<table class="bi-table"><thead><tr><th>Customer</th><th>Plan</th><th>City</th><th>Activity</th><th>Months</th><th>Risk</th></tr></thead><tbody>${active.map(r => `<tr><td>${r.CustomerID}</td><td>${r.SubscriptionType}</td><td>${r.Location}</td><td>${r.EngagementScore}</td><td>${r.TenureMonths}m</td><td><span class="badge-pill badge-red">${(r.risk * 100).toFixed(0)}%</span></td></tr>`).join('')}</tbody></table>`;
+
+    renderStory('s8-story', {
+      keyLabel: 'Leavers Caught', keyValue: `~${outOf10} of 10`, keySub: `Test precision: ${m.testPrec.toFixed(0)}% · Accuracy: ${m.testAcc.toFixed(0)}%`,
+      simpleWords: `Our simple prediction model scores every active customer so CRM knows who to save first.`,
+      bullets: [`Top warning signs: <strong>Early stay (&lt;6m)</strong>, <strong>Monthly plan</strong>, and <strong>Low activity</strong>.`, `Use the Risk Checker below to test any customer profile live.`],
+      why: 'Answers Q4: Reaching out to flagged active customers prevents cancellations before they happen.',
+      actionLabel: 'Do on Monday', actionText: 'Export the Top 20 At-Risk Active list and send a personalized retention perk this week.'
     });
+  }
 
-    const treeData = Object.keys(tree).map(subKey => {
-      const children = Object.keys(tree[subKey]).map(locKey => ({
-        name: `${locKey} (${subKey})`,
-        value: Math.round(tree[subKey][locKey])
-      }));
-      return {
-        name: `${subKey} Plan`,
-        children: children
-      };
+  function renderSlide9(rows, s) {
+    const { eng, plan, early, offer } = state.sim;
+    const redPP = (eng * 0.10 + plan * 0.14 + early * 0.15 + offer * 0.08);
+    const projRate = Math.max(5, s.churnRate - redPP);
+    const savedCustomers = Math.round(s.n * (redPP / 100) * 0.5);
+    const savedRev = savedCustomers * s.avgCLV * 0.5;
+
+    document.getElementById('sim-prog-lbl').textContent = `-${redPP.toFixed(1)} pp (Goal: 5–10 pp)`;
+    document.getElementById('sim-prog-fill').style.width = `${Math.min(100, (redPP / 10) * 100)}%`;
+
+    renderChart('s9-chart-gauge', tc => ({
+      tooltip: { formatter: () => ttCard('Simulated Cancellation Rate', `Indicative drop of ${redPP.toFixed(1)} percentage points over 6 months.`, [{ color: '#059669', label: 'Projected Rate', value: fmtPct(projRate) }, { label: 'Baseline', value: fmtPct(s.churnRate) }]) },
+      series: [{ type: 'gauge', startAngle: 195, endAngle: -15, min: 0, max: 100, progress: { show: true, width: 16, roundCap: true, itemStyle: { color: redPP >= 5 ? '#059669' : '#6D28D9' } }, axisLine: { lineStyle: { width: 16, color: [[1, tc.grid]] } }, pointer: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, detail: { formatter: v => `${v.toFixed(1)}%`, color: tc.title, fontSize: 24, fontWeight: 800, offsetCenter: [0, '6%'] }, data: [{ value: Number(projRate.toFixed(1)) }] }]
+    }), rows.length > 0);
+
+    renderStory('s9-story', {
+      keyLabel: '6-Month Customers Saved', keyValue: `~${fmtNum(savedCustomers)}`, keySub: `Est. ${fmtINR(savedRev, true)} saved (Indicative)`,
+      simpleWords: `These sliders show how combining small wins drops cancellations from ${fmtPct(s.churnRate)} to ${fmtPct(projRate)}.`,
+      bullets: [`Reduction: <strong>-${redPP.toFixed(1)} pp</strong> (${redPP >= 5 ? 'hits 5–10% goal ✓' : 'below 5% goal'}).`, `Revenue protected over 6 months: <strong>${fmtINR(savedRev, true)}</strong>.`],
+      why: 'Tests Objective 1: shows management which mix of tactics hits the 5–10% reduction target.',
+      actionLabel: 'Do on Monday', actionText: 'Pair Monthly-to-Quarterly upgrades with low-activity check-ins for maximum impact.'
     });
-
-    const option = {
-      tooltip: {
-        formatter: params => {
-          return `<strong>${params.name}</strong><br/>Lost Revenue: <strong>${formatCurrencyINR(params.value)}</strong>`;
-        }
-      },
-      series: [{
-        type: 'treemap',
-        data: treeData,
-        leafDepth: 2,
-        levels: [
-          { itemStyle: { borderColor: '#ffffff', borderWidth: 2, gapWidth: 2 } },
-          { color: ['#ef4444', '#f59e0b', '#10b981'], colorMappingBy: 'name', itemStyle: { gapWidth: 1 } }
-        ],
-        label: {
-          show: true,
-          formatter: p => `${p.name}\n${formatCurrencyINR(p.value)}`,
-          fontSize: 9
-        }
-      }]
-    };
-
-    state.charts.revTreemap.setOption(option);
-  }
-
-  function renderSurvivalCurves() {
-    const dom = document.getElementById('chart_survival_curves');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.survival) state.charts.survival = echarts.init(dom);
-
-    const plans = ['Monthly', 'Quarterly', 'Annual'];
-    const tenureMonths = Array.from({ length: 25 }, (_, i) => i);
-
-    const seriesList = plans.map(p => {
-      const subset = state.filteredCustomers.filter(c => c.subscriptionType === p);
-      const totalP = subset.length;
-      const survivalRates = tenureMonths.map(m => {
-        if (totalP === 0) return 0;
-        const survived = subset.filter(c => c.tenureMonths >= m).length;
-        return ((survived / totalP) * 100).toFixed(1);
-      });
-
-      return {
-        name: `${p} Plan`,
-        type: 'line',
-        data: survivalRates,
-        smooth: true,
-        showSymbol: false,
-        lineStyle: { width: 2.5 },
-        color: p === 'Monthly' ? '#ef4444' : p === 'Quarterly' ? '#0d9488' : '#10b981'
-      };
-    });
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        formatter: params => {
-          let str = `<strong>Tenure: ${params[0].name} Months</strong><br/>`;
-          params.forEach(p => {
-            str += `${p.marker} ${p.seriesName}: <strong>${p.value}% Retained</strong><br/>`;
-          });
-          return str;
-        }
-      },
-      legend: { data: plans.map(p => `${p} Plan`), top: 0, textStyle: { fontSize: 10 } },
-      grid: { top: 25, right: 20, bottom: 25, left: 40 },
-      xAxis: {
-        type: 'category',
-        data: tenureMonths.map(m => `M${m}`),
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#64748b', fontSize: 9, interval: 3 }
-      },
-      yAxis: {
-        type: 'value',
-        min: 0,
-        max: 100,
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 9, formatter: '{value}%' },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      series: seriesList
-    };
-
-    state.charts.survival.setOption(option);
-  }
-
-  // -------------------------------------------------------------------------
-  // SLIDE 8: Predictive Analysis (Explainable ML & Risk Scorer)
-  // -------------------------------------------------------------------------
-  function renderSlide8() {
-    if (!state.testSetMetrics) return;
-
-    const m = state.testSetMetrics;
-    const aucEl = document.getElementById('ml_kpi_auc');
-    const accEl = document.getElementById('ml_kpi_acc');
-    const precEl = document.getElementById('ml_kpi_prec');
-    const f1El = document.getElementById('ml_kpi_f1');
-
-    if (aucEl) aucEl.textContent = m.auc.toFixed(3);
-    if (accEl) accEl.textContent = formatPercent(m.accuracy);
-    if (precEl) precEl.textContent = formatPercent(m.precision);
-    if (f1El) f1El.textContent = m.f1.toFixed(3);
-
-    renderROCCurve();
-    renderFeatureImportanceChart();
-    renderTop20ActiveTable();
-    updateRiskScorer();
-
-    const cmTp = document.getElementById('cm_tp');
-    const cmFp = document.getElementById('cm_fp');
-    const cmTn = document.getElementById('cm_tn');
-    const cmFn = document.getElementById('cm_fn');
-    if (cmTp) cmTp.textContent = m.tp.toLocaleString();
-    if (cmFp) cmFp.textContent = m.fp.toLocaleString();
-    if (cmTn) cmTn.textContent = m.tn.toLocaleString();
-    if (cmFn) cmFn.textContent = m.fn.toLocaleString();
-
-    const insightS8 = document.getElementById('insight_s8');
-    if (insightS8 && state.testSetMetrics) {
-      insightS8.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>Model ROC AUC of <strong>${state.testSetMetrics.auc.toFixed(3)}</strong> demonstrates strong discrimination; Monthly billing and sub-40 engagement explain &gt;70% of risk.</span>`;
-    }
-  }
-
-  function renderROCCurve() {
-    const dom = document.getElementById('chart_ml_roc');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.mlRoc) state.charts.mlRoc = echarts.init(dom);
-
-    const rocData = state.testSetMetrics.rocPoints;
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        formatter: params => {
-          const pt = params[0].value;
-          return `FPR: ${(pt[0] * 100).toFixed(1)}%<br/>TPR (Recall): ${(pt[1] * 100).toFixed(1)}%`;
-        }
-      },
-      grid: { top: 15, right: 15, bottom: 25, left: 35 },
-      xAxis: {
-        name: 'False Positive Rate',
-        nameLocation: 'middle',
-        nameGap: 18,
-        nameTextStyle: { fontSize: 9, color: '#94a3b8' },
-        type: 'value',
-        min: 0,
-        max: 1,
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#64748b', fontSize: 8 }
-      },
-      yAxis: {
-        name: 'True Positive Rate',
-        nameLocation: 'middle',
-        nameGap: 24,
-        nameTextStyle: { fontSize: 9, color: '#94a3b8' },
-        type: 'value',
-        min: 0,
-        max: 1,
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 8 },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      series: [
-        {
-          name: 'ROC',
-          type: 'line',
-          data: rocData,
-          showSymbol: false,
-          lineStyle: { color: '#6366f1', width: 2 },
-          areaStyle: { color: 'rgba(99, 102, 241, 0.15)' }
-        },
-        {
-          name: 'Random Chance',
-          type: 'line',
-          data: [[0, 0], [1, 1]],
-          lineStyle: { type: 'dashed', color: '#cbd5e1', width: 1.5 },
-          showSymbol: false
-        }
-      ]
-    };
-
-    state.charts.mlRoc.setOption(option);
-  }
-
-  function renderFeatureImportanceChart() {
-    const dom = document.getElementById('chart_ml_features');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.mlFeatures) state.charts.mlFeatures = echarts.init(dom);
-
-    const weights = state.mlModel.weights;
-    const names = state.mlModel.featureNames;
-
-    // Odds ratios exp(w)
-    const items = [];
-    for (let i = 1; i < weights.length; i++) {
-      items.push({
-        name: names[i],
-        weight: weights[i],
-        oddsRatio: Math.exp(weights[i])
-      });
-    }
-    items.sort((a, b) => a.weight - b.weight);
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: params => {
-          const item = items[params[0].dataIndex];
-          return `<strong>${item.name}</strong><br/>` +
-                 `Beta Weight: <strong>${item.weight > 0 ? '+' : ''}${item.weight.toFixed(3)}</strong><br/>` +
-                 `Odds Ratio: <strong>${item.oddsRatio.toFixed(2)}x</strong>`;
-        }
-      },
-      grid: { top: 15, right: 35, bottom: 20, left: 110 },
-      xAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 8 },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      yAxis: {
-        type: 'category',
-        data: items.map(it => it.name),
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#334155', fontSize: 9 }
-      },
-      series: [{
-        name: 'Weight',
-        type: 'bar',
-        data: items.map(it => it.weight.toFixed(2)),
-        itemStyle: {
-          color: p => parseFloat(p.value) >= 0 ? '#ef4444' : '#10b981',
-          borderRadius: 3
-        },
-        label: {
-          show: true,
-          position: p => parseFloat(p.value) >= 0 ? 'right' : 'left',
-          fontSize: 8
-        }
-      }]
-    };
-
-    state.charts.mlFeatures.setOption(option);
-  }
-
-  function setupRiskScorerControls() {
-    const ageSlider = document.getElementById('input_scorer_age');
-    const scoreSlider = document.getElementById('input_scorer_score');
-    const planSelect = document.getElementById('select_scorer_plan');
-    const paySelect = document.getElementById('select_scorer_payment');
-
-    const lblAge = document.getElementById('lbl_scorer_age');
-    const lblScore = document.getElementById('lbl_scorer_score');
-
-    function onChange() {
-      if (lblAge && ageSlider) lblAge.textContent = ageSlider.value;
-      if (lblScore && scoreSlider) lblScore.textContent = scoreSlider.value;
-      updateRiskScorer();
-    }
-
-    if (ageSlider) ageSlider.addEventListener('input', onChange);
-    if (scoreSlider) scoreSlider.addEventListener('input', onChange);
-    if (planSelect) planSelect.addEventListener('change', onChange);
-    if (paySelect) paySelect.addEventListener('change', onChange);
-  }
-
-  function updateRiskScorer() {
-    if (!state.mlModel) return;
-
-    const age = parseInt(document.getElementById('input_scorer_age')?.value || '30', 10);
-    const score = parseFloat(document.getElementById('input_scorer_score')?.value || '45');
-    const plan = document.getElementById('select_scorer_plan')?.value || 'Monthly';
-    const payment = document.getElementById('select_scorer_payment')?.value || 'UPI';
-
-    const prob = state.mlModel.predict({
-      age: age,
-      engagementScore: score,
-      subscriptionType: plan,
-      paymentMode: payment,
-      isTier2: false
-    });
-
-    const probPct = Math.round(prob * 100);
-    const valProb = document.getElementById('val_scorer_prob');
-    const badgeTier = document.getElementById('badge_scorer_tier');
-
-    if (valProb) {
-      valProb.textContent = `${probPct}%`;
-      valProb.style.color = probPct >= 65 ? '#ef4444' : probPct >= 35 ? '#f59e0b' : '#10b981';
-    }
-
-    if (badgeTier) {
-      if (probPct >= 65) {
-        badgeTier.className = 'badge badge-red';
-        badgeTier.textContent = 'HIGH RISK ACCOUNT';
-      } else if (probPct >= 35) {
-        badgeTier.className = 'badge badge-amber';
-        badgeTier.textContent = 'MEDIUM RISK ACCOUNT';
-      } else {
-        badgeTier.className = 'badge badge-green';
-        badgeTier.textContent = 'LOW RISK ACCOUNT';
-      }
-    }
-
-    // Gauge chart update
-    renderRiskGauge(probPct);
-  }
-
-  function renderRiskGauge(probPct) {
-    const dom = document.getElementById('chart_scorer_gauge');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.scorerGauge) state.charts.scorerGauge = echarts.init(dom);
-
-    const option = {
-      series: [{
-        type: 'gauge',
-        startAngle: 180,
-        endAngle: 0,
-        min: 0,
-        max: 100,
-        radius: '100%',
-        center: ['50%', '80%'],
-        axisLine: {
-          lineStyle: {
-            width: 10,
-            color: [
-              [0.35, '#10b981'],
-              [0.65, '#f59e0b'],
-              [1.0, '#ef4444']
-            ]
-          }
-        },
-        pointer: { width: 4, length: '60%' },
-        axisTick: { show: false },
-        splitLine: { show: false },
-        axisLabel: { show: false },
-        detail: { show: false },
-        data: [{ value: probPct }]
-      }]
-    };
-
-    state.charts.scorerGauge.setOption(option);
-  }
-
-  function renderTop20ActiveTable() {
-    const tbody = document.getElementById('tbody_top20_active');
-    if (!tbody || !state.mlModel) return;
-
-    // Filter to active customers, compute predicted churn risk, and take top 20
-    const activeCust = state.allCustomers.filter(c => !c.isChurned);
-    const scored = activeCust.map(c => ({
-      id: c.customerId,
-      plan: c.subscriptionType,
-      city: c.location,
-      age: c.age,
-      score: c.engagementScore,
-      prob: state.mlModel.predict(c),
-      drivers: c.subscriptionType === 'Monthly' && c.engagementScore <= 40 ? 'Monthly + Low Eng' :
-               c.subscriptionType === 'Monthly' ? 'Monthly Plan' :
-               c.engagementScore <= 40 ? 'Low Engagement' : 'Payment Method'
-    }));
-
-    scored.sort((a, b) => b.prob - a.prob);
-    const top20 = scored.slice(0, 20);
-
-    let html = '';
-    top20.forEach(c => {
-      const probPct = Math.round(c.prob * 100);
-      html += `
-        <tr>
-          <td><code>${c.id}</code></td>
-          <td><span class="badge ${c.plan === 'Monthly' ? 'badge-red' : 'badge-purple'}">${c.plan}</span></td>
-          <td>${c.city}</td>
-          <td class="number">${c.age}</td>
-          <td class="number">${Math.round(c.score)}</td>
-          <td class="number" style="font-weight: 700; color: #ef4444;">${probPct}%</td>
-          <td><span class="badge badge-amber">${c.drivers}</span></td>
-        </tr>
-      `;
-    });
-
-    tbody.innerHTML = html;
-
-    const btnExport = document.getElementById('btnExportTop20');
-    if (btnExport) {
-      btnExport.onclick = () => exportArrayToCSV(top20, 'boxify_top20_high_risk_active.csv');
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // SLIDE 9: Retention Simulator (What-If Strategic Modeling)
-  // -------------------------------------------------------------------------
-  function setupSimulatorControls() {
-    const sEng = document.getElementById('slider_sim_eng');
-    const sShift = document.getElementById('slider_sim_shift');
-    const sEarly = document.getElementById('slider_sim_early');
-    const sDisc = document.getElementById('slider_sim_discount');
-    const btnReset = document.getElementById('btnResetSimulator');
-
-    function onSimChange() {
-      state.simulator.engLift = parseInt(sEng?.value || '15', 10);
-      state.simulator.monthlyShiftPct = parseInt(sShift?.value || '20', 10);
-      state.simulator.earlyChurnReductionPct = parseInt(sEarly?.value || '25', 10);
-      state.simulator.discountPct = parseInt(sDisc?.value || '10', 10);
-
-      document.getElementById('lbl_sim_eng').textContent = `+${state.simulator.engLift} pts`;
-      document.getElementById('lbl_sim_shift').textContent = `${state.simulator.monthlyShiftPct}%`;
-      document.getElementById('lbl_sim_early').textContent = `${state.simulator.earlyChurnReductionPct}%`;
-      document.getElementById('lbl_sim_discount').textContent = `${state.simulator.discountPct}%`;
-
-      const kpis = calculateKPIs(state.filteredCustomers);
-      renderSlide9(kpis);
-    }
-
-    if (sEng) sEng.addEventListener('input', onSimChange);
-    if (sShift) sShift.addEventListener('input', onSimChange);
-    if (sEarly) sEarly.addEventListener('input', onSimChange);
-    if (sDisc) sDisc.addEventListener('input', onSimChange);
-
-    if (btnReset) {
-      btnReset.addEventListener('click', () => {
-        if (sEng) sEng.value = '15';
-        if (sShift) sShift.value = '20';
-        if (sEarly) sEarly.value = '25';
-        if (sDisc) sDisc.value = '10';
-        onSimChange();
-      });
-    }
-  }
-
-  function renderSlide9(kpis) {
-    const sim = state.simulator;
-    const baseChurnRate = kpis.churnRate;
-    const baseChurnCount = kpis.churned;
-
-    // Simulation Levers Calculation:
-    // 1. Engagement Lift: low-engagement churn rate is 78.9%, each point lifts retention by ~0.8%
-    const lowEngChurners = state.filteredCustomers.filter(c => c.isChurned && c.engagementScore <= 30).length;
-    const savedFromEng = Math.round(lowEngChurners * (sim.engLift / 30) * 0.40);
-
-    // 2. Monthly to Quarterly shift: monthly churn is 60.6%, quarterly is 37.7% (22.9% delta)
-    const monthlyChurners = state.filteredCustomers.filter(c => c.isChurned && c.subscriptionType === 'Monthly').length;
-    const savedFromShift = Math.round(monthlyChurners * (sim.monthlyShiftPct / 100) * 0.38);
-
-    // 3. Early Churn Reduction:
-    const earlyChurners = kpis.earlyChurnCount;
-    const savedFromEarly = Math.round(earlyChurners * (sim.earlyChurnReductionPct / 100) * 0.45);
-
-    // 4. Loyalty Discount:
-    const savedFromDiscount = Math.round(baseChurnCount * 0.20 * (sim.discountPct / 30) * 0.25);
-
-    // Total unique customers saved (clamped to prevent double counting)
-    const totalSaved = Math.min(baseChurnCount, savedFromEng + savedFromShift + savedFromEarly + savedFromDiscount);
-    const projectedChurnCount = Math.max(0, baseChurnCount - totalSaved);
-    const projectedChurnRate = kpis.total > 0 ? projectedChurnCount / kpis.total : 0;
-    const relativeReduction = baseChurnRate > 0 ? (baseChurnRate - projectedChurnRate) / baseChurnRate : 0;
-
-    // Financial calculations
-    const avgMonthlyRate = kpis.churned > 0 ? (kpis.revLostAnnual / kpis.churned) / 12 : 650;
-    const grossRevSaved6M = totalSaved * avgMonthlyRate * 6;
-    const netDiscountCost = totalSaved * avgMonthlyRate * 6 * (sim.discountPct / 100);
-    const netRevSaved6M = Math.max(0, grossRevSaved6M - netDiscountCost);
-    const annualRevSaved = netRevSaved6M * 2;
-
-    // Update UI elements
-    const projRateEl = document.getElementById('sim_kpi_proj_rate');
-    const baseRateEl = document.getElementById('sim_kpi_base_rate');
-    const savedCustEl = document.getElementById('sim_kpi_saved_cust');
-    const rev6mEl = document.getElementById('sim_kpi_rev_6m');
-    const revAnnualEl = document.getElementById('sim_kpi_rev_annual');
-    const goalBadge = document.getElementById('simGoalBadge');
-    const progressBar = document.getElementById('simProgressBar');
-
-    if (projRateEl) projRateEl.textContent = formatPercent(projectedChurnRate);
-    if (baseRateEl) baseRateEl.textContent = formatPercent(baseChurnRate);
-    if (savedCustEl) savedCustEl.textContent = `+${totalSaved.toLocaleString()}`;
-    if (rev6mEl) rev6mEl.textContent = formatCurrencyINR(netRevSaved6M);
-    if (revAnnualEl) revAnnualEl.textContent = formatCurrencyINR(annualRevSaved);
-
-    // Goal Progress Bar (Target: 5% to 10% relative reduction)
-    const relReductionPct = relativeReduction * 100;
-    if (progressBar) {
-      const barWidth = Math.min(100, Math.max(5, (relReductionPct / 10) * 100));
-      progressBar.style.width = `${barWidth}%`;
-    }
-
-    if (goalBadge) {
-      if (relReductionPct >= 10.0) {
-        goalBadge.className = 'badge badge-green';
-        goalBadge.textContent = `MAX GOAL EXCEEDED (${relReductionPct.toFixed(1)}% REDUCTION)`;
-      } else if (relReductionPct >= 5.0) {
-        goalBadge.className = 'badge badge-green';
-        goalBadge.textContent = `GOAL ACHIEVED (${relReductionPct.toFixed(1)}% REDUCTION)`;
-      } else {
-        goalBadge.className = 'badge badge-amber';
-        goalBadge.textContent = `BELOW TARGET (${relReductionPct.toFixed(1)}% REDUCTION)`;
-      }
-    }
-
-    renderSimulatorChart(baseChurnCount, projectedChurnCount, totalSaved, kpis.total);
-  }
-
-  function renderSimulatorChart(baseChurn, projChurn, saved, total) {
-    const dom = document.getElementById('chart_sim_comparison');
-    if (!dom || !window.echarts) return;
-    if (!state.charts.simComparison) state.charts.simComparison = echarts.init(dom);
-
-    const baseRetained = total - baseChurn;
-    const projRetained = total - projChurn;
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' }
-      },
-      legend: { data: ['Retained Subscribers', 'Churned Subscribers'], top: 5 },
-      grid: { top: 35, right: 25, bottom: 25, left: 120 },
-      xAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisLabel: { color: '#64748b', fontSize: 9 },
-        splitLine: { lineStyle: { color: '#f1f5f9' } }
-      },
-      yAxis: {
-        type: 'category',
-        data: ['Current Baseline', 'Simulated Outlook'],
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#1e293b', fontSize: 11, fontWeight: 700 }
-      },
-      series: [
-        {
-          name: 'Retained Subscribers',
-          type: 'bar',
-          stack: 'total',
-          data: [baseRetained, projRetained],
-          itemStyle: { color: '#10b981' },
-          label: { show: true, position: 'inside', formatter: '{c}', fontSize: 10 }
-        },
-        {
-          name: 'Churned Subscribers',
-          type: 'bar',
-          stack: 'total',
-          data: [baseChurn, projChurn],
-          itemStyle: { color: '#ef4444' },
-          label: { show: true, position: 'inside', formatter: '{c}', fontSize: 10 }
-        }
-      ]
-    };
-
-    state.charts.simComparison.setOption(option);
-  }
-
-  // -------------------------------------------------------------------------
-  // SLIDE 12: Appendix A2 (Master Granular Segment Table)
-  // -------------------------------------------------------------------------
-  function renderSlide12() {
-    const tbody = document.getElementById('tbody_master_segments');
-    if (!tbody) return;
-
-    // Cross-tabulate by Plan x Location x AgeGroup x Payment
-    const crossTab = {};
-    state.filteredCustomers.forEach(c => {
-      const key = `${c.subscriptionType}__${c.location}__${c.ageGroup}__${c.paymentMode}`;
-      if (!crossTab[key]) {
-        crossTab[key] = {
-          plan: c.subscriptionType,
-          loc: c.location,
-          ageGroup: c.ageGroup,
-          pay: c.paymentMode,
-          total: 0,
-          churned: 0,
-          spent: 0,
-          tenure: 0,
-          score: 0,
-          revLost: 0
-        };
-      }
-      crossTab[key].total++;
-      crossTab[key].spent += c.totalSpent;
-      crossTab[key].tenure += c.tenureMonths;
-      crossTab[key].score += c.engagementScore;
-      if (c.isChurned) {
-        crossTab[key].churned++;
-        crossTab[key].revLost += c.monthlyRate * 12;
-      }
-    });
-
-    const rows = Object.values(crossTab).map(r => ({
-      plan: r.plan,
-      location: r.loc,
-      ageGroup: r.ageGroup,
-      payment: r.pay,
-      total: r.total,
-      active: r.total - r.churned,
-      churned: r.churned,
-      churnRate: r.total > 0 ? r.churned / r.total : 0,
-      avgScore: r.total > 0 ? r.score / r.total : 0,
-      avgCLV: r.total > 0 ? r.spent / r.total : 0,
-      revLost: r.revLost
-    }));
-
-    rows.sort((a, b) => b.churnRate - a.churnRate);
-
-    function populateTable(filteredRows) {
-      let html = '';
-      filteredRows.slice(0, 100).forEach(r => {
-        const ratePct = (r.churnRate * 100).toFixed(1);
-        html += `
-          <tr>
-            <td><strong>${r.plan}</strong></td>
-            <td>${r.location}</td>
-            <td>${r.ageGroup}</td>
-            <td>${r.payment}</td>
-            <td class="number">${r.total}</td>
-            <td class="number">${r.active}</td>
-            <td class="number">${r.churned}</td>
-            <td class="number" style="font-weight: 700; color: ${r.churnRate > 0.5 ? '#ef4444' : '#10b981'};">${ratePct}%</td>
-            <td class="number">${r.avgScore.toFixed(1)}</td>
-            <td class="number">${formatCurrencyINR(r.avgCLV)}</td>
-            <td class="number">${formatCurrencyINR(r.revLost)}</td>
-          </tr>
-        `;
-      });
-      tbody.innerHTML = html;
-    }
-
-    populateTable(rows);
-
-    const searchInput = document.getElementById('inputSearchSegments');
-    if (searchInput) {
-      searchInput.oninput = (e) => {
-        const q = e.target.value.toLowerCase();
-        const filtered = rows.filter(r =>
-          r.plan.toLowerCase().includes(q) ||
-          r.location.toLowerCase().includes(q) ||
-          r.ageGroup.toLowerCase().includes(q) ||
-          r.payment.toLowerCase().includes(q)
-        );
-        populateTable(filtered);
-      };
-    }
-
-    const btnExport = document.getElementById('btnExportFullSegments');
-    if (btnExport) {
-      btnExport.onclick = () => exportArrayToCSV(rows, 'boxify_granular_segments_master.csv');
-    }
   }
 
   // =========================================================================
-  // 9. UTILITIES (CSV EXPORT, MODALS, HELPERS)
+  // UI, RISK CHECKER, GLOSSARY, TOUR & BOOTSTRAP
   // =========================================================================
+  window.bxGoSlide = goToSlide;
+  function goToSlide(idx) {
+    const slides = document.querySelectorAll('.slide');
+    const c = Math.max(0, Math.min(slides.length - 1, idx));
+    state.currentSlide = c;
+    slides.forEach((s, i) => s.classList.toggle('active', i === c));
+    document.getElementById('footer-slide-indicator').textContent = `Slide ${c + 1} / ${slides.length}`;
+    document.getElementById('btn-prev-slide').disabled = c === 0;
+    document.getElementById('btn-next-slide').disabled = c === slides.length - 1;
+    document.querySelectorAll('.slide-dot').forEach((d, i) => d.classList.toggle('active', i === c));
+    document.getElementById('stage-container').scrollTop = 0;
 
-  function exportArrayToCSV(arr, filename) {
-    if (!arr || arr.length === 0) return;
-    const keys = Object.keys(arr[0]);
-    let csv = keys.join(',') + '\n';
-    arr.forEach(row => {
-      const vals = keys.map(k => {
-        let v = row[k] !== undefined ? row[k] : '';
-        if (typeof v === 'string' && (v.includes(',') || v.includes('"'))) {
-          v = `"${v.replace(/"/g, '""')}"`;
-        }
-        return v;
-      });
-      csv += vals.join(',') + '\n';
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const m = SLIDE_META[c];
+    document.getElementById('speaker-notes-body').innerHTML = `<h4 style="color:var(--text-main);">${c + 1}. ${m.title}</h4><div style="background:var(--bg-card-subtle);padding:10px;border-left:3px solid var(--color-accent);border-radius:6px;">${m.script}</div><div style="background:var(--color-warning-bg);padding:10px;border-radius:6px;"><strong>Likely Question:</strong><br>${m.qa}</div>`;
+    setTimeout(resizeActive, 290);
+    updateDiagnostics();
   }
 
-  // =========================================================================
-  // 10. BOOTSTRAP INITIALIZATION
-  // =========================================================================
+  function updateDiagnostics() {
+    const act = document.querySelector('.slide.active'), body = document.getElementById('diagnostics-body');
+    if (!act || !body) return;
+    const list = [...act.querySelectorAll('.chart-container')].map(el => {
+      const r = el.getBoundingClientRect(), w = r.height < 100 || r.width < 100;
+      return `<div style="padding:8px;border-radius:6px;background:var(--bg-card-subtle);display:flex;justify-content:space-between;"><span>${el.id}</span><strong style="color:${w ? '#DC2626' : '#059669'}">${Math.round(r.width)}×${Math.round(r.height)}px ${w ? '⚠️' : '✓'}</strong></div>`;
+    });
+    body.innerHTML = `<div style="font-weight:700;">Active Slide Charts (${list.length})</div>` + (list.length ? list.join('') : '<span>No charts on this slide.</span>');
+  }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    setupManualFilePicker();
-    loadDataPipeline();
-  });
+  function updateRiskChecker() {
+    if (!state.model.scoreFn) return;
+    const plan = document.getElementById('rc-plan').value;
+    const eng = Number(document.getElementById('rc-eng').value);
+    const tenure = Number(document.getElementById('rc-tenure').value);
+    const age = Number(document.getElementById('rc-age').value);
+    document.getElementById('rc-eng-val').textContent = `${eng} (${eng < 40 ? 'Low' : eng < 70 ? 'Med' : 'High'})`;
+    document.getElementById('rc-tenure-val').textContent = `${tenure} months`;
+    document.getElementById('rc-age-val').textContent = `${age} yrs`;
 
+    const p = state.model.scoreFn({ SubscriptionType: plan, EngagementScore: eng, TenureMonths: tenure, Age: age });
+    const badge = document.getElementById('rc-badge');
+    if (p >= 0.6) { badge.className = 'badge-pill badge-red'; badge.textContent = `High Risk (${(p * 100).toFixed(0)}%)`; }
+    else if (p >= 0.35) { badge.className = 'badge-pill badge-amber'; badge.textContent = `Medium Risk (${(p * 100).toFixed(0)}%)`; }
+    else { badge.className = 'badge-pill badge-green'; badge.textContent = `Low Risk (${(p * 100).toFixed(0)}%)`; }
+  }
+
+  function initUI() {
+    const dots = document.getElementById('slide-dots'), grid = document.getElementById('overview-grid');
+    SLIDE_META.forEach((m, i) => {
+      const d = document.createElement('span'); d.className = 'slide-dot' + (i === 0 ? ' active' : ''); d.title = `${i + 1}. ${m.title}`; d.onclick = () => goToSlide(i); dots.appendChild(d);
+      const t = document.createElement('div'); t.className = 'overview-thumb' + (i === 0 ? ' active' : '');
+      t.innerHTML = `<span style="font-size:11px;font-weight:800;color:var(--color-accent);">SLIDE ${i + 1}</span><strong style="font-size:12px;">${m.title}</strong>`;
+      t.onclick = () => { goToSlide(i); document.getElementById('overview-modal').classList.remove('open'); };
+      grid.appendChild(t);
+    });
+
+    document.getElementById('btn-prev-slide').onclick = () => goToSlide(state.currentSlide - 1);
+    document.getElementById('btn-next-slide').onclick = () => goToSlide(state.currentSlide + 1);
+    document.getElementById('btn-toggle-slicers').onclick = () => { document.getElementById('slicer-panel').classList.toggle('collapsed'); setTimeout(resizeActive, 300); };
+    document.getElementById('btn-reset-filters').onclick = () => {
+      state.filters = { status: new Set(), plans: new Set(), engBands: new Set(), ageGroups: new Set(), location: '', payModes: new Set(), genders: new Set(), joinYears: new Set() };
+      document.getElementById('filter-location-select').value = '';
+      renderAll();
+    };
+    document.getElementById('filter-location-select').onchange = e => { state.filters.location = e.target.value; renderAll(); };
+
+    document.getElementById('btn-explain-simply').onclick = e => {
+      state.explainSimply = !state.explainSimply;
+      e.target.textContent = state.explainSimply ? '💡 Explain Simply: ON' : '📊 Explain Simply: OFF';
+      e.target.classList.toggle('active-toggle', state.explainSimply);
+      renderAll();
+    };
+    document.getElementById('btn-glossary').onclick = () => document.getElementById('glossary-modal').classList.add('open');
+    document.getElementById('btn-close-glossary').onclick = () => document.getElementById('glossary-modal').classList.remove('open');
+
+    document.getElementById('btn-s8-toggle').onclick = () => {
+      state.s8TableView = !state.s8TableView;
+      document.getElementById('s8-chart-card').style.display = state.s8TableView ? 'none' : 'flex';
+      document.getElementById('s8-table-card').style.display = state.s8TableView ? 'flex' : 'none';
+      if (!state.s8TableView) setTimeout(resizeActive, 80);
+    };
+
+    const exportCSV = (name, rows) => {
+      const b = new Blob([window.Papa ? window.Papa.unparse(rows) : ''], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click();
+    };
+    document.getElementById('btn-s8-export').onclick = () => exportCSV('boxify_top20_at_risk.csv', getFiltered().filter(r => !r.Churned).map(r => ({ ...r, RiskPct: Math.round((state.model.scoreFn(r) || 0) * 100) })).sort((a, b) => b.RiskPct - a.RiskPct).slice(0, 20));
+    document.getElementById('btn-s12-export').onclick = () => exportCSV('boxify_customers_filtered.csv', getFiltered());
+
+    ['rc-plan', 'rc-eng', 'rc-tenure', 'rc-age'].forEach(id => document.getElementById(id).oninput = updateRiskChecker);
+
+    const bindSim = (id, key, fmt) => {
+      document.getElementById(id).oninput = e => { state.sim[key] = Number(e.target.value); document.getElementById(`${id}-val`).textContent = fmt(state.sim[key]); renderSlide9(getFiltered(), summarize(getFiltered())); };
+    };
+    bindSim('sim-eng', 'eng', v => `+${v}%`);
+    bindSim('sim-plan', 'plan', v => `${v}%`);
+    bindSim('sim-early', 'early', v => `${v}%`);
+    bindSim('sim-offer', 'offer', v => `${v}%`);
+    document.getElementById('btn-sim-reset').onclick = () => {
+      state.sim = { eng: 15, plan: 15, early: 15, offer: 20 };
+      ['eng', 'plan', 'early', 'offer'].forEach(k => { document.getElementById(`sim-${k}`).value = state.sim[k]; document.getElementById(`sim-${k}-val`).textContent = k === 'eng' ? `+${state.sim[k]}%` : `${state.sim[k]}%`; });
+      renderSlide9(getFiltered(), summarize(getFiltered()));
+    };
+
+    const setZ = z => { state.zoomLevel = Math.max(80, Math.min(130, z)); document.body.className = document.body.className.replace(/zoom-level-\d+/g, '') + ` zoom-level-${state.zoomLevel}`; document.getElementById('zoom-val-label').textContent = `${state.zoomLevel}%`; setTimeout(resizeActive, 150); };
+    document.getElementById('btn-zoom-in').onclick = () => setZ(state.zoomLevel + 10);
+    document.getElementById('btn-zoom-out').onclick = () => setZ(state.zoomLevel - 10);
+    document.getElementById('btn-theme-toggle').onclick = () => { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', state.theme); renderAll(); };
+    const toggleMeet = () => { document.body.classList.toggle('meeting-mode'); setTimeout(resizeActive, 250); };
+    document.getElementById('btn-meeting-mode').onclick = toggleMeet;
+    document.addEventListener('mousemove', e => { if (document.body.classList.contains('meeting-mode')) { const sp = document.getElementById('meeting-spotlight'); sp.style.left = `${e.clientX}px`; sp.style.top = `${e.clientY}px`; } });
+
+    document.getElementById('btn-notes').onclick = () => document.getElementById('speaker-notes-drawer').classList.toggle('open');
+    document.getElementById('btn-close-notes').onclick = () => document.getElementById('speaker-notes-drawer').classList.remove('open');
+    document.getElementById('btn-close-diag').onclick = () => document.getElementById('diagnostics-drawer').classList.remove('open');
+    document.getElementById('btn-overview').onclick = () => document.getElementById('overview-modal').classList.add('open');
+    document.getElementById('btn-close-overview').onclick = () => document.getElementById('overview-modal').classList.remove('open');
+    document.getElementById('btn-close-focus').onclick = () => document.getElementById('focus-modal').classList.remove('open');
+    document.querySelectorAll('.btn-focus').forEach(b => b.onclick = () => {
+      const srcEl = document.getElementById(b.dataset.chart), src = srcEl && window.echarts ? window.echarts.getInstanceByDom(srcEl) : null; if (!src) return;
+      document.getElementById('focus-modal-title').textContent = srcEl.closest('.card').querySelector('.card-title span').textContent;
+      document.getElementById('focus-modal').classList.add('open');
+      const fcEl = document.getElementById('focus-chart-container'); const fc = window.echarts.getInstanceByDom(fcEl) || window.echarts.init(fcEl);
+      fc.setOption(src.getOption(), true); setTimeout(() => fc.resize(), 80);
+    });
+    document.getElementById('btn-print').onclick = () => window.print();
+    document.getElementById('btn-fullscreen').onclick = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else document.exitFullscreen().catch(() => {}); };
+
+    const TOUR = [
+      { t: '1. Plain-English Story Panels', d: 'Slides 4–9 show charts on the left and a plain-English Story Panel on the right that updates with every filter.' },
+      { t: '2. Explain Simply & Glossary', d: 'Use "Explain Simply" in the top bar to switch between everyday words and analyst terms, or open Glossary anytime.' },
+      { t: '3. Interactive Risk Checker & Simulator', d: 'Test any customer profile on Slide 8 and model 5–10% churn reduction levers on Slide 9.' },
+      { t: '4. Presenter Shortcuts', d: 'Press ←/→ to move slides, M for Meeting Mode, N for Script & Q&A, G for Grid, D for Diagnostics, and ? for Help.' }
+    ];
+    let tIdx = 0;
+    const showT = i => { tIdx = i; document.getElementById('tour-step-title').textContent = TOUR[i].t; document.getElementById('tour-step-desc').textContent = TOUR[i].d; document.getElementById('tour-step-counter').textContent = `Step ${i + 1} of 4`; document.getElementById('btn-tour-next').textContent = i === 3 ? 'Finish ✓' : 'Next →'; };
+    document.getElementById('btn-tour').onclick = () => { showT(0); document.getElementById('tour-modal').classList.add('open'); };
+    document.getElementById('btn-close-tour').onclick = () => document.getElementById('tour-modal').classList.remove('open');
+    document.getElementById('btn-tour-skip').onclick = () => document.getElementById('tour-modal').classList.remove('open');
+    document.getElementById('btn-tour-next').onclick = () => { if (tIdx < 3) showT(tIdx + 1); else document.getElementById('tour-modal').classList.remove('open'); };
+
+    document.getElementById('manual-csv-input').onchange = e => {
+      const f = e.target.files[0]; if (!f || !window.Papa) return;
+      window.Papa.parse(f, { header: true, skipEmptyLines: true, complete: r => { if (parseAndClean(r.data, f.name, 'manual picker')) document.getElementById('fallback-loader').classList.remove('open'); } });
+    };
+
+    document.addEventListener('keydown', e => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goToSlide(state.currentSlide + 1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); goToSlide(state.currentSlide - 1); }
+      else if (e.key >= '1' && e.key <= '9') goToSlide(Number(e.key) - 1);
+      else if (e.key.toLowerCase() === 'm') toggleMeet();
+      else if (e.key.toLowerCase() === 'n') document.getElementById('speaker-notes-drawer').classList.toggle('open');
+      else if (e.key.toLowerCase() === 'd') { updateDiagnostics(); document.getElementById('diagnostics-drawer').classList.toggle('open'); }
+      else if (e.key.toLowerCase() === 'g') document.getElementById('overview-modal').classList.toggle('open');
+      else if (e.key.toLowerCase() === 'f') document.getElementById('btn-fullscreen').click();
+      else if (e.key === '?') document.getElementById('btn-tour').click();
+      else if (e.key === 'Escape') document.querySelectorAll('.modal-overlay,.side-drawer').forEach(x => x.classList.remove('open'));
+    });
+
+    const checkHash = () => { const m = window.location.hash.match(/^#slide-(\d+)$/); if (m) goToSlide(Number(m[1]) - 1); };
+    window.addEventListener('hashchange', checkHash);
+    window.addEventListener('resize', () => setTimeout(resizeActive, 120));
+    checkHash(); goToSlide(state.currentSlide);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initUI(); loadInitialData(); updateRiskChecker(); });
 })();
