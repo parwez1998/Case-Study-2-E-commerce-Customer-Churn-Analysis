@@ -565,13 +565,14 @@
     const outOf10 = Math.round(m.testRec / 10);
     document.getElementById('s8-headline').textContent = `Trained on 80% of customers and tested on 20%: correctly flags about ${outOf10} out of 10 leavers (${m.testAcc.toFixed(1)}% overall accuracy).`;
 
+    const factors = [...m.factors].reverse();
     renderChart('s8-chart-factors', tc => ({
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => ttCard(m.factors[p[0].dataIndex].name, 'Relative strength of this warning sign in our simple prediction model.', [{ color: '#6D28D9', label: 'Importance', value: m.factors[p[0].dataIndex].score.toFixed(2) }]) },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => { const f = factors[p[0].dataIndex]; return ttCard(f.name, 'Relative strength of this warning sign in our simple prediction model.', [{ color: '#6D28D9', label: 'Importance', value: f.score.toFixed(2) }]); } },
       grid: { left: 145, right: 20, top: 16, bottom: 26 },
       xAxis: { type: 'value', axisLabel: { color: tc.text }, splitLine: { lineStyle: { color: tc.grid } } },
-      yAxis: { type: 'category', data: m.factors.map(f => f.name).reverse(), axisLabel: { color: tc.text, fontSize: 11 } },
-      series: [{ type: 'bar', barMaxWidth: 24, itemStyle: { borderRadius: [0, 5, 5, 0], color: '#6D28D9' }, data: m.factors.map(f => Number(f.score.toFixed(2))).reverse() }]
-    }), m.factors.length > 0);
+      yAxis: { type: 'category', data: factors.map(f => f.name), axisLabel: { color: tc.text, fontSize: 11 } },
+      series: [{ type: 'bar', barMaxWidth: 24, itemStyle: { borderRadius: [0, 5, 5, 0], color: '#6D28D9' }, data: factors.map(f => Number(f.score.toFixed(2))) }]
+    }), factors.length > 0);
 
     const active = rows.filter(r => !r.Churned).map(r => ({ ...r, risk: m.scoreFn ? m.scoreFn(r) : 0 })).sort((a, b) => b.risk - a.risk).slice(0, 20);
     document.getElementById('s8-atrisk-table').innerHTML = `<table class="bi-table"><thead><tr><th>Customer</th><th>Plan</th><th>City</th><th>Activity</th><th>Months</th><th>Risk</th></tr></thead><tbody>${active.map(r => `<tr><td>${r.CustomerID}</td><td>${r.SubscriptionType}</td><td>${r.Location}</td><td>${r.EngagementScore}</td><td>${r.TenureMonths}m</td><td><span class="badge-pill badge-red">${(r.risk * 100).toFixed(0)}%</span></td></tr>`).join('')}</tbody></table>`;
